@@ -1,7 +1,0 @@
-GET https://discordapp.com/api/channels/917670036540358699/messages/ HTTP/1.1
-Host: discordapp.com
-Accept: */*
-Authorization: Bot OTE3NzA1NDQxMDU0Njg3MjYy.Ya8lyw.cewDWv2IimxAmHTW80L3oPJb7Nc
-User-Agent: DiscordBot (https://github.com/Arjun-Anubis/snowflake, v0.1)
-Content-type application/json
-Connection: close

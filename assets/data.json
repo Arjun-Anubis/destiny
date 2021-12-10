@@ -1,0 +1,11 @@
+{
+	"content" : "Message to be sent",
+	"components": [
+			{
+				"components" : [],
+				"type" : 1,
+				"label" : "clicky"
+			}
+			]
+
+}

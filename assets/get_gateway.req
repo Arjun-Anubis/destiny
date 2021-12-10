@@ -1,0 +1,4 @@
+GET /gateway HTTP1.1
+Accept: */*
+User-Agent: DiscordBot (https://github.com/Arjun-Anubis/snowflake, v0.1)
+Content-type: application/json
