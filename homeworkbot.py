@@ -11,17 +11,18 @@ import json
 
 
 IDENTIFY=2
+VOICE_CONNECT=4
 
 rest_url = "https://discordapp.com/api/"
 #rest_url = "http://localhost:4001/"
-#token = "OTE3NzA1NDQxMDU0Njg3MjYy.Ya8lyw.SKRXtX3_63k7_aKLM2O_7-BJDEw"
 with open( "token" ) as f:
-    token = f.read()
-headers = { "Authorization" : f"Bot {token}", "User-Agent" : "DiscordBot (https://github/com/Arjun-Anubis/snowflake, v0.1)" }
+    token = f.read()[:-1] #Removing newline
+
+headers = { "Authorization" : f"Bot {token}", "User-Agent" : "DiscordBot (https://github.com/Arjun-Anubis/snowflake, v0.1)" }
 
 presence = dict()
 presence["since"] = 91879201
-presence["activities"] = [{"name" : "Serving ya homewerk!", "type" : 0 }]
+presence["activities"] = [{"name" : "Serving ya homewerk!, source code at https://github.com/Arjun-Anubis/snowflake", "type" : 0 }]
 presence["status"] = "online"
 presence["afk"] = False
 
@@ -29,22 +30,31 @@ user = dict()
 session_id = ""
 heartbeat_interval = 0
 seq_no = 0
+buffer_send = None
+buffer_response = None
 
-def api_post( subdivision, data, files=None ):
+def api_post( subdivision, data, files=None, method="POST" ):
     try:
         if not files:
-            print( f"{rest_url}{subdivision}", data, headers )
-            response = requests.post( f"{rest_url}{subdivision}", json=data, headers=headers )
-            print( f"API replies with {response}" )
+            if data:
+                print( f"{rest_url}{subdivision}" )
+                pprint( data )
+                response = requests.request( method,  f"{rest_url}{subdivision}", json=data, headers=headers )
+                print(response)
+
+            else:
+                print( f"{rest_url}{subdivision}" )
+                response = requests.request( method,  f"{rest_url}{subdivision}", headers=headers )
+                print(response)
+
         else:
-            print( "Special post" )
             response = requests.post( f"{rest_url}{subdivision}",  headers=headers, files=files )
-            print( response, files )
+        return response
             
     except Exception as e:
         print(e)
 
-def draft( code ):
+def draft( code ,guild=None, channel=None ):
     response = {  "op" : code }
     d = {}
     
@@ -54,16 +64,32 @@ def draft( code ):
             d["intents"] = 513
             d["properties"] = { "$os" : "linux", "$browser" : "anubi", "$device": "anubi" }
             d["presence"] = presence
+        case 4:
+            d["guild_id"] = guild
+            d["channel_id"] = channel
     response["d"] = d
-    pprint( f"Draft: { response }" )
     return json.dumps( response )
 
  
+async def send( websocket ):
+    global buffer_response
+    global buffer_send
+    while True:
+        if buffer_send:
+            print( f"Sending { buffer_send }" )
+            resp = await websocket.send( buffer_send )
+            pprint(resp)
+            buffer_response = resp
+            buffer_send = None
+        else:
+            await asyncio.sleep(5)
+        
 async def recieve(websocket):
     global user
     global heartbeat_interval
     global seq_no
     global session_id
+
 
     await websocket.send( draft( IDENTIFY ) )
     while True:
@@ -106,10 +132,14 @@ async def main(url):
     async with websockets.connect(url) as websocket:
         recv_task = asyncio.create_task( recieve( websocket ) )
         heartbeat_task  = asyncio.create_task( heart_beat( websocket ) )
+        send_task = asyncio.create_task( send( websocket ) )
         await recv_task
         await heartbeat_task
+        await send_task
         
 def message_handler( js ):
+    global buffer_response
+    global buffer_send
     message = js["d"]
     if not message["author"]["id"] == user["id"]:
         if message["content"] == "ping": 
@@ -132,6 +162,14 @@ def message_handler( js ):
 
                 reply_json = dict()
                 reply_json["components"] = None
+                try:
+                    verb = mlist[1]
+                    subject = mlist[2]
+                    assignment = mlist[3]
+                    person = mlist[4]
+                    rating = int( mlist[5] )
+                except:
+                    pass
 
                 match mlist[1]:
 
@@ -141,7 +179,9 @@ def message_handler( js ):
                             r = requests.get( message["attachments"][0]["url"] )
                             with open( f"hw/{mlist[2]}/{mlist[3]}/{message['author']['username']}.pdf", "wb") as f:
                                 f.write( r.content )
-                            reply_json["content"] = "Success"
+                            ratings = json.load( open( f"hw/{ subject }/{ assignment }/.ratings.json" ) )
+                            ratings[ message[ "author" ][ "username"] ] = { "ratings" : [] }
+                            reply_json["content"] = "Recieved! Thank you!"
                         except IndexError as e:
                             reply_json["content"] = "Not enough arguments (probably) "
 
@@ -160,7 +200,6 @@ def message_handler( js ):
                                 reply_json["content"] = "Failed" + str(e)
 
                     case "list" | "ls" : 
-
                         try:
                             if len(mlist) == 2: #List subjects
                                 reply_json["content"] = ", ".join( os.listdir( "hw" ) ) 
@@ -169,9 +208,16 @@ def message_handler( js ):
                                     if mlist[2] == i:
                                         reply_json["content"] = ", ".join( os.listdir( f"hw/{ i }" ) )
                             elif len(mlist) == 4: #List files
-                                draft = ""
+                                msg_draft = ""
                                 
-                                reply_json["content"] = ",".join( os.listdir( f"hw/{ mlist[2] }/{ mlist[3] }/" ) )
+                                ratings = json.load( open( f"hw/{ subject }/{ assignment }/.ratings.json" ) )
+                                for i in ratings.keys():
+                                    try:
+                                        msg_draft += f"{ i }:\t { ratings[ i ][ 'rate_value' ] }\n"
+                                    except:
+                                        msg_draft += f"Assignment: { ratings[ i ] }\n\n"
+                                #reply_json["content"] = ",".join( os.listdir( f"hw/{ mlist[2] }/{ mlist[3] }/" ) )
+                                reply_json["content"] = msg_draft
 
                         except IndexError as e:
                             reply_json["content"] = "Not enough arguments (probably) "
@@ -196,14 +242,6 @@ def message_handler( js ):
                             reply_json["content"] = "Failed" + str( e )
                             
                     case "rate":
-                        try:
-                            verb = mlist[1]
-                            subject = mlist[2]
-                            assignment = mlist[3]
-                            person = mlist[4]
-                            rating = int( mlist[5] )
-                        except:
-                            pass
                         if len(mlist) ==  6:
                             if rating > 0 and rating < 6: 
 
@@ -226,10 +264,14 @@ def message_handler( js ):
                         else:
                             reply_json["content"] = "Syntax is \"hw rate _subject_ _assignment_ _user_ _rating_\""
                             
+                    case "join":
+                        # buffer_send = ( draft( VOICE_CONNECT, guild=message["guild_id"], channel=message["channel_id"] ) )
+                        reply_json["content"] = api_post( f"users/{ message['author']['id'] }", None, method="GET" ).content.decode()
                     case _:
                         reply_json["content"] = f"Invalid verb, use hw pull to get hw, pulling without verb will be added soon"
                             
 
+                
                 if send_reply:
                     api_post( f"channels/{channel_id}/messages", reply_json )
                 else:
