@@ -1,6 +1,8 @@
 #!/bin/python3
 
 from pprint import pprint
+import uuid
+import random
 import os.path
 import os
 import requests
@@ -13,6 +15,7 @@ import json
 IDENTIFY=2
 VOICE_CONNECT=4
 
+voice_url = None
 rest_url = "https://discordapp.com/api/"
 #rest_url = "http://localhost:4001/"
 with open( "token" ) as f:
@@ -28,22 +31,20 @@ presence["afk"] = False
 
 user = dict()
 session_id = ""
+voice_guild_id = None
 heartbeat_interval = 0
 seq_no = 0
 buffer_send = None
 buffer_response = None
-
+voice_token = None
 def api_post( subdivision, data, files=None, method="POST" ):
     try:
         if not files:
             if data:
-                print( f"{rest_url}{subdivision}" )
-                pprint( data )
                 response = requests.request( method,  f"{rest_url}{subdivision}", json=data, headers=headers )
                 print(response)
 
             else:
-                print( f"{rest_url}{subdivision}" )
                 response = requests.request( method,  f"{rest_url}{subdivision}", headers=headers )
                 print(response)
 
@@ -61,7 +62,7 @@ def draft( code ,guild=None, channel=None ):
     match code:
         case 2:
             d["token"] = token
-            d["intents"] = 513
+            d["intents"] = 641
             d["properties"] = { "$os" : "linux", "$browser" : "anubi", "$device": "anubi" }
             d["presence"] = presence
         case 4:
@@ -82,13 +83,16 @@ async def send( websocket ):
             buffer_response = resp
             buffer_send = None
         else:
-            await asyncio.sleep(5)
+            await asyncio.sleep(0.5)
         
 async def recieve(websocket):
+    global voice_token
+    global voice_url
     global user
     global heartbeat_interval
     global seq_no
     global session_id
+    global voice_guild_id
 
 
     await websocket.send( draft( IDENTIFY ) )
@@ -105,9 +109,16 @@ async def recieve(websocket):
                     case "READY":
                         print( "Recieved READY" )
                         user = js["d"]["user"]
+                        session_id = js["d"]["session_id"]
+                        print( session_id )
                     case "MESSAGE_CREATE":
                         print( "!! Message create" )
-                        message_handler( js) 
+                        message_handler( js ) 
+                    case "VOICE_SERVER_UPDATE":
+                        print( "Handling voice now" )
+                        voice_url = f'wss://{ js[ "d" ][ "endpoint" ] }'
+                        voice_guild_id = js[ "d" ][ "guild_id" ]
+                        voice_token = js[ "d" ][ "token" ]
                     case _:
                         print( f"Type: {js['t']}" )
             case 10:
@@ -127,15 +138,65 @@ async def heart_beat( websocket ):
         await asyncio.sleep( heartbeat_interval/1000 ) #milisecond to second
         await websocket.send( json.dumps( { "op" : 1, "d" : seq_no+1  } ).encode() )
 
+async def voice_beat( voice_socket, voicebeat_interval ):
+    print( "Voice beat" )
+    resp =  json.dumps( { "op" : 3, "d" : 1501184119561 } )
+    pprint(resp)
+    await voice_socket.send( resp )
     
+    while True:
+        await asyncio.sleep( voicebeat_interval/1000 ) #milisecond to second
+        resp =  json.dumps( { "op" : 3, "d" : uuid.uuid4().int } )
+        print( resp )
+        await voice_socket.send( resp )
+    
+async def voice_handle( voice_socket ):
+    print( "Voice handle" )
+    while True:
+        print( "Waiting" )
+        js = json.loads( await voice_socket.recv() )
+        pprint( js )
+        match js[ "op" ]: 
+            case _:
+                print( "Voice recieve" )
+    
+async def voice( ):
+    global voice_url
+    while not voice_url:
+        await asyncio.sleep(0.5)
+
+    async with websockets.connect( voice_url ) as voice_socket:
+
+        print( "Works" ) 
+        js = json.loads( await voice_socket.recv() )
+        if js[ "op" ] == 8:
+            print( js )
+            print( "OP8" )
+            print( "Sending auth" )
+            resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_guild_id, "user_id" : user["id"], "session_id" : session_id, "token" : voice_token } } )
+            print(resp)
+            await voice_socket.send( resp )
+            op2 = await voice_socket.recv()
+            op2 = json.loads( op2 )
+            print( f"ip: { op2['d']['ip'] }" ) 
+            print( f"port: { op2['d']['port'] }" ) 
+            voice_handle_task = asyncio.create_task( voice_handle( voice_socket ) )
+            voice_beat_task = asyncio.create_task( voice_beat( voice_socket , js[ "d" ][ "heartbeat_interval" ] ) )
+            await voice_beat_task
+            await voice_handle_task
+                    
+                    
 async def main(url):
     async with websockets.connect(url) as websocket:
         recv_task = asyncio.create_task( recieve( websocket ) )
         heartbeat_task  = asyncio.create_task( heart_beat( websocket ) )
         send_task = asyncio.create_task( send( websocket ) )
+        voice_task = asyncio.create_task( voice() )
         await recv_task
         await heartbeat_task
         await send_task
+        await voice_task
+        print( "All done!" )
         
 def message_handler( js ):
     global buffer_response
@@ -265,8 +326,16 @@ def message_handler( js ):
                             reply_json["content"] = "Syntax is \"hw rate _subject_ _assignment_ _user_ _rating_\""
                             
                     case "join":
-                        # buffer_send = ( draft( VOICE_CONNECT, guild=message["guild_id"], channel=message["channel_id"] ) )
-                        reply_json["content"] = api_post( f"users/{ message['author']['id'] }", None, method="GET" ).content.decode()
+                        resp = json.loads( api_post( f"guilds/{ message['guild_id'] }/channels", None, method="GET" ).content.decode() )
+                        channel_id = ""
+                        for i in resp:
+                            if i["type"] == 2:
+                                reply_json["content"] = f"Found voice channel { i[ 'name' ] } "
+                                channel_id = i[ "id" ]
+                        buffer_send = ( draft( VOICE_CONNECT, guild=message["guild_id"], channel=channel_id ) )
+                    
+                    case "leave":
+                        buffer_send = draft( VOICE_CONNECT, guild=message["guild_id"] )
                     case _:
                         reply_json["content"] = f"Invalid verb, use hw pull to get hw, pulling without verb will be added soon"
                             
