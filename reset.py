@@ -1,0 +1,2 @@
+class HardReset( Exception ):
+    pass

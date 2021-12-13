@@ -3,9 +3,6 @@ import os
 import requests
 import json
 
-with open( "token" ) as f:
-    token = f.read()[:-1] #Removing newline
-
 presence = dict()
 presence["since"] = 91879201
 presence["activities"] = [{"name" : "Serving ya homewerk!, source code at https://github.com/Arjun-Anubis/snowflake", "type" : 0 }]

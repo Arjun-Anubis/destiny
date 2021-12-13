@@ -1,8 +1,19 @@
 from header import *
+from reset import HardReset
+import asyncio
+import requests
 import os
 import json
 from convenience import api_post, draft
 
+def restart():
+    import sys
+    print("argv was",sys.argv)
+    print("sys.executable was", sys.executable)
+    print("restart now")
+
+    import os
+    os.execv(sys.executable, ['python'] + sys.argv)
 
 async def message_handler( js, shared_info, voice_info, session_id=None, user=None ):
     message = js["d"]
@@ -187,8 +198,20 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                     case "leave":
                         reply_json["content"] = "Leaving..."
                         await shared_info.put( draft( VOICE_CONNECT, guild=message["guild_id"] ) )
+                    case "restart":
+
+                        raise Exception( "User requested restart" )
+                        # This works, but not cleanly asyncio.get_running_loop().stop()
+                    case "restart_hard":
+                        print( "[red]!!!" )
+                        print( js )
+                        if "919190731065806878" in js["d"]["member"]["roles"]:
+                            reply_json["content"] = "Hard Reset!"
+                            api_post( f"channels/{channel_id}/messages", reply_json ).content 
+                            raise HardReset
                     case _:
                         reply_json["content"] = f"Invalid verb, use hw pull to get hw, pulling without verb will be added soon"
+                    
                             
 
                 
