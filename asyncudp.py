@@ -1,5 +1,4 @@
 import asyncio
-print( "Anubi's udp data protocol" )
 
 
 class ClosedError(Exception):
@@ -29,7 +28,6 @@ class _SocketProtocol:
         return await self._packets.get()
     def error_received(self, exc):
 
-        print( "Anubi's error handler" )
         print( exc )
 
 
