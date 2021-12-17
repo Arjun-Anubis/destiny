@@ -1,5 +1,5 @@
 from header import *
-from reset import HardReset
+from exceptions import HardReset, SoftReset
 import asyncio
 import requests
 import os
@@ -70,7 +70,7 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                                     subject = i
                                     person = mlist[3]
                                     print( "Could assign person" )
-                                    rating = mlist[4]
+                                    rating = mlist[1]
                                     print( "Could assign rating" )
                                     break
                                 else:
@@ -127,8 +127,7 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                             if  "subject" not in locals(): #List subjects
                                 reply_json["content"] = ", ".join( subjects ) 
                             elif  "assignment" not in locals(): #List assignments
-                                for i in subjects:
-                                    reply_json["content"] = ", ".join( os.listdir( f"hw/{ i }" ) )
+                                reply_json["content"] = ", ".join( os.listdir( f"hw/{ subject }" ) )
                             elif "person" not in locals(): #List files
                                 msg_draft = ""
                                 
@@ -187,30 +186,41 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                             
                     case "join":
                         resp = json.loads( api_post( f"guilds/{ message['guild_id'] }/channels", None, method="GET" ).content.decode() )
-                        voice_channel_id = ""
-                        for i in resp:
-                            if i["type"] == 2:
-                                print( f"Voice channel { i[ 'name' ] }" )
-                                reply_json["content"] = f"Joining voice channel { i[ 'name' ] }!"
-                                voice_channel_id = i[ "id" ]
-                        await shared_info.put( draft( VOICE_CONNECT, guild=message["guild_id"], channel=voice_channel_id ) )
+                        voice_channels = [ i for i in resp if i["type"] == 2 ]
+                        print( voice_channels )
+
+                        for i in voice_channels:
+                            pass
+
+                        # This is pretty much arbritratry, wil change later
+                        voice_channel = voice_channels[1]
+
+                        reply_json["content"] = f"Joining {voice_channel['name']}!"
+
+                        await shared_info.put( draft( VOICE_CONNECT, guild=message["guild_id"], channel=voice_channel["id"] ) )
+                        
                     
                     case "leave":
                         reply_json["content"] = "Leaving..."
                         await shared_info.put( draft( VOICE_CONNECT, guild=message["guild_id"] ) )
+
                     case "restart":
 
-                        raise Exception( "User requested restart" )
-                        # This works, but not cleanly asyncio.get_running_loop().stop()
+                        reply_json["content"] = "Soft Reset"
+                        api_post( f"channels/{channel_id}/messages", reply_json ).content 
+                        raise SoftReset
+
                     case "restart_hard":
                         print( "[red]!!!" )
-                        print( js )
-                        if "919190731065806878" in js["d"]["member"]["roles"]:
+                        allowed_role = "919190731065806878" 
+                        if allowed_role in js["d"]["member"]["roles"]:
                             reply_json["content"] = "Hard Reset!"
                             api_post( f"channels/{channel_id}/messages", reply_json ).content 
                             raise HardReset
+                        else:
+                            reply_json["content"] = "Only <@{allowed_role}> can hard reset"
                     case _:
-                        reply_json["content"] = f"Invalid verb, use hw pull to get hw, pulling without verb will be added soon"
+                        reply_json["content"] = f"{mlist[1]} does not look like a subject, assignment or verb"
                     
                             
 

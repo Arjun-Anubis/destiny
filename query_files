@@ -1,0 +1,3 @@
+#!/bin/sh
+subject=$1
+curl -d @sharepoint.json -X POST -H @sharepoint.req "https://shikshantarschoolorg.sharepoint.com/sites/2021-22Zephyr$subject/_api/web/GetListUsingPath(DecodedUrl=@a1)/RenderListDataAsStream?@a1=%27%2Fsites%2F2021%2D22Zephyr$subject%2FClass%20Materials%27&TryNewExperienceSingle=TRUE" 2>/dev/null | jq .

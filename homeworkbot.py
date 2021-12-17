@@ -1,23 +1,52 @@
 #!/bin/python3
-
+# local
 from header import *
-from reset import HardReset
+from exceptions import HardReset, SoftReset
 from convenience import api_post, draft
-from rich import inspect
-import ctypes
 import default_handlers
+
+import opus
+
 import asyncudp
-import socket
+
+
+# rich
+
+from rich import inspect
+from rich.live import Live
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich.traceback import install
+
+
+# pip installed 
+import requests
+import nacl.secret as secret
+import pyaudio as pyaudio
+import ctypes
+import asyncio
+import wave
+                    
+# system
+
 import uuid
+import socket
 import random
 import os.path
 import os
-import requests
 import sys
-import asyncio
 import websockets
 import json
+import traceback
+ 
 
+
+p = pyaudio.PyAudio()
+stream2 = p.open( format=pyaudio.paFloat32, channels=2, rate=48000, output=True )
+stream = wave.open( "test.wav", "rb" )
+
+install()
 
         
 class Client():
@@ -31,11 +60,15 @@ class Client():
             try:
                 asyncio.run( self.main( "wss://gateway.discord.gg" ) )
             except HardReset as e:
-                print( "Caught hard reset!" )
+                print ( "Caught hard reset!" )
                 break
+            except SoftReset as e:
+                print ( "Soft reset" )
+            except KeyboardInterrupt:
+                print ( "[green] Closing to keyboard interrupt" )
+                quit()
             except Exception as e:
-                print( f"Caught {e}" )
-                print( "Soft reset" )
+                raise e
 
     async def main( self, url ):
         shared_info = asyncio.Queue( 30 )
@@ -43,7 +76,7 @@ class Client():
         async with websockets.connect(url) as websocket:
             main_websocket_task = asyncio.create_task( self.websoc_main( websocket, shared_info, voice_info ) )
             await main_websocket_task
-            print( "All done!" )
+            print ( "All done!" )
     
     async def websoc_main( self, websocket, shared_info, voice_info ):
 
@@ -51,14 +84,14 @@ class Client():
         raw = await websocket.recv()
         op10 = json.loads( raw )
         
-        print( op10 )
+        # print ( op10 )
         if op10[ "op" ] == 10:
            hbi = op10[ "d" ][ "heartbeat_interval" ] 
         
         raw = await websocket.recv()
         ready = json.loads( raw )
 
-        print( ready )
+        # print ( ready )
 
         if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
             session_info = dict()
@@ -75,7 +108,7 @@ class Client():
         await heartbeat_task
         await voice_main_task
 
-        print( "All done with main websoc" )
+        print ( "All done with main websoc" )
 
     async def websoc_handler( self, websocket, session_info, shared_info, voice_info ):
         while True:
@@ -90,7 +123,7 @@ class Client():
                             await self.message_handler( js, shared_info, voice_info, **session_info ) 
 
                         case "VOICE_SERVER_UPDATE":
-                            print( js )
+                            print ( js )
                             voice_update = dict()
                             voice_update[ "voice_url" ] = f'wss://{ js[ "d" ][ "endpoint" ] }'
                             voice_update[ "voice_guild_id" ] = js[ "d" ][ "guild_id" ]
@@ -103,10 +136,11 @@ class Client():
                             await self.misc_handler( js, shared_info, voice_info, **session_info ) 
                             
                 case 11:
-                    print( "[cyan bold]Heartbeat: " )
-                    print( js )
+                    # print ( "[cyan bold]Heartbeat: " )
+                    # print ( js )
+                    pass
                 case _:
-                    print(js)
+                    print (js)
     async def send( self, websocket, shared_info ):
         while True:
             buffer_send = await shared_info.get()
@@ -120,72 +154,70 @@ class Client():
     async def voice( self, session_info, voice_info ):
         voice_update = await voice_info.get()
         async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as voice_socket:
-            js = json.loads( await voice_socket.recv() )
-            if js[ "op" ] == 8:
-                print( js )
-                print( "OP8" )
-                print( "Sending auth" )
-                resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : session_info[ "user" ][ "id" ], "session_id" : session_info[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
-                print(resp)
-                await voice_socket.send( resp )
-                op2 = await voice_socket.recv()
-                op2 = json.loads( op2 )
-                print( f"ip: { op2['d']['ip'] }" ) 
-                print( f"port: { op2['d']['port'] }" ) 
-                voice_send_info = asyncio.Queue( 30 )
-                voice_recv_info = asyncio.Queue( 30 )
-                voice_send_task = asyncio.create_task( self.voice_send( voice_socket, voice_send_info ) )
-                voice_udp_task = asyncio.create_task( self.voice_udp( op2["d"]["ip"], op2["d"]["port"] , op2["d"]["ssrc"], voice_send_info, voice_recv_info ) )
-                voice_handle_task = asyncio.create_task( self.voice_handle( voice_socket, voice_recv_info ) )
-                voice_beat_task = asyncio.create_task( self.voice_beat( voice_socket , js[ "d" ][ "heartbeat_interval" ] ) )
-                await voice_beat_task
-                await voice_handle_task
-                await voice_send_task
-                await voice_udp_task
+            try:
+                js = json.loads( await voice_socket.recv() )
+                if js[ "op" ] == 8:
+                    resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : session_info[ "user" ][ "id" ], "session_id" : session_info[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
+                    await voice_socket.send( resp )
+                    op2 = await voice_socket.recv()
+                    op2 = json.loads( op2 )
+                    voice_send_info = asyncio.Queue( 30 )
+                    voice_recv_info = asyncio.Queue( 30 )
+                    voice_send_task = asyncio.create_task( self.voice_send( voice_socket, voice_send_info ) )
+                    voice_udp_task = asyncio.create_task( self.voice_udp( op2["d"]["ip"], op2["d"]["port"] , op2["d"]["ssrc"], voice_send_info, voice_recv_info ) )
+                    voice_handle_task = asyncio.create_task( self.voice_handle( voice_socket, voice_recv_info ) )
+                    voice_beat_task = asyncio.create_task( self.voice_beat( voice_socket , js[ "d" ][ "heartbeat_interval" ] ) )
+                    await voice_beat_task
+                    await voice_handle_task
+                    await voice_send_task
+                    await voice_udp_task
 
+            except websockets.ConnectionClosed as e:
+                inspect ( e )
+            
 
     async def voice_beat( self, voice_socket, voicebeat_interval ):
         while True:
             resp =  json.dumps( { "op" : 3, "d" : uuid.uuid4().int } )
-            print( "[cyan bold]Sending: " )
-            print( resp )
+            # print ( "[cyan bold]Sending: " )
+            # print ( resp )
             await voice_socket.send( resp )
             await asyncio.sleep( voicebeat_interval/1000 )
         
     async def voice_handle( self, voice_socket, voice_recv_info ):
         while True:
-            js = json.loads( await voice_socket.recv() )
+            try:
+                js = json.loads( await voice_socket.recv() )
+            except Exception as e:
+                inspect( e )
+                raise e
             match js[ "op" ]: 
                 case 4:
                     await voice_recv_info.put( js )
                 case _:
-                    print( "[cyan bold]Recieved: " )
-                    print( js )
+                    # print ( "[cyan bold]Recieved: " )
+                    print ( js )
 
     async def voice_send( self, voice_socket, voice_send_info ):
         while True:
             buffer_send = await voice_send_info.get()
-            print( "[purple]Recieved buffer send" )
-            print( buffer_send )
+            print ( buffer_send )
             await voice_socket.send( buffer_send ) 
 
                         
     async def voice_udp( self, ip, port, ssrc, voice_send_info, voice_recv_info ):
         
-        # ip = "127.0.0.1"
-        # port = 9999
         while True:
             voice_socket = await  asyncudp.create_socket( remote_addr = ( ip, port ) )
             if voice_socket._protocol._is_ready:
-                print( voice_socket._protocol._is_ready )
+                print ( voice_socket._protocol._is_ready )
                 break
             else:
-                print( "[red bold]Connection refused... Re-trying in 5..." )
+                print ( "[red bold]Connection refused... Re-trying in 5..." )
                 await asyncio.sleep( 5 )
                 continue
         
 
-        print( "[bold yellow]Created" )
 
 
         discovery = bytes.fromhex( "00010046" ) + int.to_bytes( ssrc, 4, "big" ) + int.to_bytes( 0, 66, "big" )
@@ -194,9 +226,6 @@ class Client():
         data, addr = await voice_socket.recvfrom()
         recv_ip = "".join([ chr( i )  for i in data[8:50] if i !=b'0x00' ])
         recv_port = int.from_bytes( data[-2:] )
-        print( recv_port )
-        print( recv_ip  )
-        print( data, addr )
 
         repl = dict()
         repl["op"] = 1
@@ -205,7 +234,7 @@ class Client():
         repl["d"]["data"] = dict()
         repl["d"]["data"]["address"] = recv_ip
         repl["d"]["data"]["port"] = recv_port
-        repl["d"]["data"]["mode"] = "xsalsa20_poly1305_lite"
+        repl["d"]["data"]["mode"] = "xsalsa20_poly1305"
 
 
         await voice_send_info.put( json.dumps( repl ) )
@@ -213,11 +242,68 @@ class Client():
         data, addr = await voice_socket.recvfrom()
 
         repl = await voice_recv_info.get()
+        # ssrc = repl["d"]["ssrc"]
+        key =  bytes( repl["d"]["secret_key"] ) 
+        print (len(key))
+        safe = secret.SecretBox( key )
+        
+        decoder = opus.decoder.Decoder( 48000, 2 )
+        encoder = opus.encoder.Encoder( 48000, 2, 2049 )
+        send_sequence = 0
+        sequence = 0
+        send_ssrc = os.urandom(4)
+        send_time = 0
+        await voice_send_info.put( json.dumps ({ "op" : 5, "d" : { "speaking": 5, "delay" : 0, "ssrc" : int.from_bytes( send_ssrc ) } } ) ) 
+        f = open( "test.raw", "wb" )
 
-        while True:
-            data, addr = await voice_socket.recvfrom()
-            print ( repl )
-            print ( len(data) )
-            print ( data )
+        with Live( "recieving" ) as live:
+            while True:
+                    
+                try:
+                    data, addr = await voice_socket.recvfrom()
+                except Exception as e:
+                    inspect( e )
+                print( sequence )
+                print ( "." )
+                td = ""
+                
+                if data[0] == 129:
+                    td += ("[red bold]Silence\n") 
+                    live.update(td)
+                    continue
+                elif data[0] == 128:
+
+                    td += ( "[green bold]Voice\n")
+
+                    sequence = data[2:4]
+                    time_stamp = data[4:8]
+            
+                    nonce = bytearray(24)
+                    nonce[:12] = data[:12] # Setting nonce from header
+                    encrypted_data = data[12:]
+
+                    decrypted_data = safe.decrypt( bytes( encrypted_data ), bytes( nonce ) ) 
+
+                    decoded_data = decoder.decode( decrypted_data, 960 )
+                    print( decoded_data )
+                    f.write( decoded_data )
+            
+                send_header = bytearray( 12 )
+                send_header[0] = 0x80
+                send_header[1] = 0x78
+                send_header[2:4] = send_sequence.to_bytes(2, "big" )
+                send_header[4:8] = send_time.to_bytes(4, "big" )
+                send_header[8:12] = send_ssrc
+                send_nonce = send_header + bytearray(12)
+                send_data = send_header + safe.encrypt( encoder.encode( stream.readframes(20), 960 ), bytes( send_nonce ) ) 
+                
+                
+            
+                voice_socket.sendto( send_data )
+                send_sequence += 1
+                send_time += 20
+                td += f"[purple]Length: [cyan]\n[/cyan purple]"
+                live.update(td)
+
 
         voice_socket.close()
