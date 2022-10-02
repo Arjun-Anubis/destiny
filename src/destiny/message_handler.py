@@ -1,10 +1,10 @@
-from header import *
-from exceptions import HardReset, SoftReset
+from destiny.header import *
+from destiny.exceptions import HardReset, SoftReset
 import asyncio
 import requests
 import os
 import json
-from convenience import api_post, draft
+from destiny.convenience import api_post, draft
 
 def restart():
     import sys

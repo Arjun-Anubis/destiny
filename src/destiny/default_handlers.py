@@ -1,4 +1,4 @@
-from convenience import *
+from destiny.convenience import *
 import requests
 import os
 import json

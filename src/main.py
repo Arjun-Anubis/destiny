@@ -1,8 +1,7 @@
-import importlib
-import homeworkbot
-import message_handler
+import destiny
+import destiny.homeworkbot as homeworkbot
+import destiny.default_handlers as default_handlers
+import destiny.runners
 
-while True:
-    homeworkbot.Client(message_handler.message_handler).run()
-    importlib.reload( homeworkbot )
-    
+client = homeworkbot.Client(default_handlers.message_handler)
+destiny.runners.auto_reload(client)

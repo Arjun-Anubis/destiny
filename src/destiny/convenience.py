@@ -1,4 +1,4 @@
-from header import *
+from destiny.header import *
 import os
 import requests
 import json

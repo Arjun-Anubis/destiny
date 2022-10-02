@@ -1,13 +1,13 @@
 #!/bin/python3.11
 # local
-from header import *
-from exceptions import HardReset, SoftReset
-from convenience import api_post, draft
-import default_handlers
+from destiny.header import *
+from destiny.exceptions import HardReset, SoftReset
+from destiny.convenience import api_post, draft
+import destiny.default_handlers as default_handlers
 
 import opus
 
-import asyncudp
+import destiny.asyncudp as asyncudp
 
 
 # rich

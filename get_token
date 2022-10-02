@@ -1,2 +1,0 @@
-#!/bin/sh
-urlencode -dp $(sqlite3 Cookies "select value from cookies where name = 'authtoken'") | cut -d "&" -f 1 | sed "s/=/ /"
