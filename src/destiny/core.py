@@ -1,9 +1,11 @@
 #!/bin/python3.11
 # local
 from destiny.header import *
+from destiny.api_constants import *
 from destiny.exceptions import HardReset, SoftReset
 from destiny.convenience import api_post, draft
 import destiny.default_handlers as default_handlers
+
 
 import opus
 
@@ -30,6 +32,8 @@ import wave
                     
 # system
 
+import random
+import logging
 import uuid
 import socket
 import random
@@ -41,16 +45,23 @@ import json
 import traceback
  
 
-
-# p = pyaudio.PyAudio()
-# stream2 = p.open( format=pyaudio.paFloat32, channels=2, rate=48000, output=True )
-# stream = open( "output.raw", "rb" )
-
+# installing rich traceback
 install()
 
+from rich.logging import RichHandler
+
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="DEBUG", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(markup=True)]
+)
+
+log = logging.getLogger("rich")
         
 class Client():
     def __init__( self, msg_handler=default_handlers.message_handler, cg_handler=default_handlers.cg_handler, misc_handler=default_handlers.misc_handler ):
+        """
+        A client object is an instance of the discord bot, it takes three parameters, a message handler, a cg handler and a miscellanous handler. The defaults are specified in defaul_handler.py
+        """
         self.message_handler = msg_handler
         self.cg_handler = cg_handler
         self.misc_handler = misc_handler
@@ -58,59 +69,78 @@ class Client():
     def run( self ):
         while True:
             try:
-                asyncio.run( self.main( "wss://gateway.discord.gg" ) )
+                asyncio.run( self._initialize_async( "wss://gateway.discord.gg" ) )
             except HardReset as e:
-                print ( "Caught hard reset!" )
+                log.critical("Hard Reset")
                 break
             except SoftReset as e:
-                print ( "Soft reset" )
+                log.warning( "Soft reset" )
             except KeyboardInterrupt:
                 print( "[green] Closing to keyboard interrupt" )
                 quit()
             except Exception as e:
                 raise e
 
-    async def main( self, url ):
-        shared_info = asyncio.Queue( 30 )
-        voice_info = asyncio.Queue( 30 )
-        async with websockets.connect(url) as websocket:
-            main_websocket_task = asyncio.create_task( self.websoc_main( websocket, shared_info, voice_info ) )
+    async def _initialize_async( self, url ):
+
+        log.info("[green] Initializing IPC..." )
+
+        queues = {
+                "shared" : asyncio.Queue( 30 ),
+                "voice" : asyncio.Queue( 30 ),
+                "heartbeat" : asyncio.Queue(1)
+                }
+
+
+        async with websockets.connect(url, ping_timeout=None, ping_interval=None) as websocket:
+
+            main_websocket_task = asyncio.create_task( self._init_websocket( websocket, queues ) )
             await main_websocket_task
-            print ( "All done!" )
+        
     
-    async def websoc_main( self, websocket, shared_info, voice_info ):
+    async def _init_websocket( self, websocket, queues ):
 
+
+        hello_event = json.loads( await websocket.recv() )
+        if hello_event[ "op" ] == HELLO_EVENT:
+            heartbeat_interval = hello_event[ "d" ][ "heartbeat_interval" ] 
+
+
+
+        # Should be some logic here
         await websocket.send( draft( IDENTIFY ) )
-        raw = await websocket.recv()
-        op10 = json.loads( raw )
-        
-        # print ( op10 )
-        if op10[ "op" ] == 10:
-           hbi = op10[ "d" ][ "heartbeat_interval" ] 
-        
-        raw = await websocket.recv()
-        ready = json.loads( raw )
 
-        # print ( ready )
 
+        ready = json.loads( await websocket.recv() )
+        log.info( ready )
         if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
-            session_info = dict()
-            session_info[ "session_id" ] = ready["d"][ "session_id" ]
-            session_info[ "user" ] = ready[ "d" ][ "user" ]
+            # session_info = dict()
+            # session_info[ "session_id" ] = ready["d"][ "session_id" ]
+            # session_info[ "user" ] = ready[ "d" ][ "user" ]
+            queues["session"] = {
+                    "session_id" : ready["d"]["session_id"],
+                    "user" : ready["d"]["user"]
+                    }
+        del ready
 
-        websoc_handler_task = asyncio.create_task( self.websoc_handler( websocket, session_info, shared_info, voice_info ) )
-        send_task = asyncio.create_task( self.send( websocket, shared_info ) )
-        heart_beat_task = asyncio.create_task( self.heart_beat( websocket, hbi ) )
-        voice_main_task = asyncio.create_task( self.voice( session_info, voice_info ) )
+        websoc_handler_task = asyncio.create_task( self.websoc_handler( websocket, queues ) )
+        send_task = asyncio.create_task( self.send( websocket, queues["shared"] ) )
+        voice_main_task = asyncio.create_task( self.voice( queues["session"], queues["voice"] ) )
         
+        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval, queues["heartbeat"] ) )
+
+        await heartbeat_task
         await websoc_handler_task
         await send_task
-        await heartbeat_task
         await voice_main_task
 
         print ( "All done with main websoc" )
 
-    async def websoc_handler( self, websocket, session_info, shared_info, voice_info ):
+    async def websoc_handler( self, websocket, queues ):
+        session_info = queues["session"]
+        shared_info = queues["shared"]
+        voice_info = queues["voice"]
+
         while True:
             raw =  await websocket.recv()
             js = json.loads( raw )
@@ -136,8 +166,9 @@ class Client():
                             await self.misc_handler( js, shared_info, voice_info, **session_info ) 
                             
                 case 11:
-                    # print ( "[cyan bold]Heartbeat: " )
-                    # print ( js )
+                    info( "[cyan bold]Heartbeat: " )
+                    queues["heartbeat"].put(js)
+
                     pass
                 case _:
                     print (js)
@@ -146,10 +177,15 @@ class Client():
             buffer_send = await shared_info.get()
             await websocket.send( buffer_send )
 
-    async def heart_beat( self, websocket, hbi ):
+    async def heart_beat( self, websocket, heartbeat_interval, heartbeat_queue ):
         while True:
-            await websocket.send( json.dumps( { "op" : 1, "d" : None  } ) )
-            await asyncio.sleep( hbi / 1000 )
+            jitter = random.random()
+            await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
+            log.info("Sending heartbeat")
+            await websocket.send( json.dumps( HEART_BEAT_JSON ) )
+            heartbeat_acknowledge = await heartbeat_queue.get()
+            log.info("Heartbeat Acknowledge")
+            log.info( heartbeat_acknowledge )
 
     async def voice( self, session_info, voice_info ):
         voice_update = await voice_info.get()
@@ -225,7 +261,7 @@ class Client():
 
         data, addr = await voice_socket.recvfrom()
         recv_ip = "".join([ chr( i )  for i in data[8:50] if i !=b'0x00' ])
-        recv_port = int.from_bytes( data[-2:] )
+        recv_port = int.from_bytes( data[-2:] , "big" )
 
         repl = dict()
         repl["op"] = 1

@@ -6,11 +6,14 @@ import os
 import json
 from destiny.convenience import api_post, draft
 
+
+DEST_DIR = "../assets/hw"
+
 def restart():
     import sys
-    print("argv was",sys.argv)
-    print("sys.executable was", sys.executable)
-    print("restart now")
+    print(f"argv was",sys.argv)
+    print(f"sys.executable was", sys.executable)
+    print(f"restart now")
 
     import os
     os.execv(sys.executable, ['python'] + sys.argv)
@@ -18,11 +21,11 @@ def restart():
 async def message_handler( js, shared_info, voice_info, session_id=None, user=None ):
     message = js["d"]
     if not message["author"]["id"] == user["id"]:
-        if message["content"] == "ping": 
-            print( f"I am { user['id'] } " )
+        if message["content"] == f"ping": 
+            print( f"I am { user['id'] } f" )
             channel_id = message["channel_id"]
             reply_json = dict()
-            reply_json["message_reference"] = { "message_id" : message["id"], "channel_id" : message["channel_id"], "guild_id" : message["guild_id"] }
+            reply_json["message_reference"] = { f"message_id" : message["id"], f"channel_id" : message["channel_id"], f"guild_id" : message["guild_id"] }
             reply_json["content"] = f"Pong indeed, <@{message['author']['id']}>!"
             reply_json["components"] = []
             api_post( f"channels/{channel_id}/messages", reply_json )
@@ -31,21 +34,21 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
 
         elif len(message["content"].split())  > 1:
             mlist = message["content"].split()
-            if mlist[0] == "hw" or mlist[0] == "Hw" or mlist[0] == "HW":
+            if mlist[0] == f"hw" or mlist[0] == f"Hw" or mlist[0] == f"HW":
 
-                subjects = os.listdir( "hw" )
+                subjects = os.listdir( f"{ DEST_DIR }" )
                 for i in subjects:
-                    if mlist[1] in os.listdir( f"hw/{i}" ):
+                    if mlist[1] in os.listdir( f"{ DEST_DIR }/{i}" ):
                         mlist.insert( 1, i )
-                        mlist.insert( 1, "pull" )
+                        mlist.insert( 1, f"pull" )
                     elif len(mlist) > 2:
-                        if mlist[2] in os.listdir( f"hw/{i}" ):
+                        if mlist[2] in os.listdir( f"{ DEST_DIR }/{i}" ):
                             mlist.insert( 2, i )
                     
 
                 if mlist[1] in subjects:
                     print( f"[blue]Found {mlist[1]} in subjects!" )
-                    mlist.insert( 1, "pull" )
+                    mlist.insert( 1, f"pull" )
                         
                 
                 send_reply = True
@@ -57,11 +60,11 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                 try:
                     verb = mlist[1]
                     subject = mlist[2]
-                    if subject not in os.listdir( "hw" ):
+                    if subject not in os.listdir( f"{ DEST_DIR }" ):
                         print( f"{ subject } not in { subjects }" )
                         for i in subjects:
                             print( f"Checking {i}" )
-                            assignments = os.listdir( f"hw/{ i }" )
+                            assignments = os.listdir( f"{ DEST_DIR }/{ i }" )
                             print( assignments )
                             try:
                                 if subject in assignments:
@@ -69,15 +72,15 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                                     assignment = subject
                                     subject = i
                                     person = mlist[3]
-                                    print( "Could assign person" )
+                                    print( f"Could assign person" )
                                     rating = mlist[1]
-                                    print( "Could assign rating" )
+                                    print( f"Could assign rating" )
                                     break
                                 else:
                                     print( f"{subject} not in { assignments }" )
                             except Exception as e:
                                 print( f"[red]Should not be here cuz {e}" )
-                                print( "Not enough args for rate, pull or push" )
+                                print( f"Not enough args for rate, pull or push" )
                                 print( subject, assignment )
                     else:
                         assignment = mlist[3]
@@ -92,46 +95,46 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                         try: 
                             print(message["attachments"][0]["url"])
                             r = requests.get( message["attachments"][0]["url"] )
-                            with open( f"hw/{ subject }/{ assignment }/{message['author']['username']}.pdf", "wb") as f:
+                            with open( f"{ DEST_DIR }/{ subject }/{ assignment }/{message['author']['username']}.pdf", f"wb") as f:
                                 f.write( r.content )
-                            ratings = json.load( open( f"hw/{ subject }/{ assignment }/.ratings.json" ) )
-                            ratings[ message[ "author" ][ "username"] ] = { "ratings" : [] }
-                            reply_json["content"] = "Recieved! Thank you!"
+                            ratings = json.load( open( f"{ DEST_DIR }/{ subject }/{ assignment }/.ratings.json" ) )
+                            ratings[ message[ f"author" ][ f"username"] ] = { f"ratings" : [] }
+                            reply_json["content"] = f"Recieved! Thank you!"
                         except IndexError as e:
-                            reply_json["content"] = "Not enough arguments (probably) "
+                            reply_json["content"] = f"Not enough arguments (probably) f"
 
                     case "pull" | "get" :
-                        if "person" not in locals():
-                            ratings = json.load( open( f"hw/{ subject }/{ assignment }/.ratings.json" ) )
+                        if f"person" not in locals():
+                            ratings = json.load( open( f"{ DEST_DIR }/{ subject }/{ assignment }/.ratings.json" ) )
                             
-                            max_rating = { "rate_value" : 0 }
+                            max_rating = { f"rate_value" : 0 }
                             print( ratings )
                             for i in ratings.keys():
-                                if i == "Name":
+                                if i == f"Name":
                                     continue
                                 if ratings[i]["rate_value"] > max_rating["rate_value"] :
                                     max_rating = ratings[i]
                                     person = i
-                            api_post( f"channels/{channel_id}/messages", None, files= { "hw.pdf" : open( f"hw/{ subject }/{ assignment }/{ person }.pdf", "rb" )}  )
+                            api_post( f"channels/{channel_id}/messages", None, files= { f"{ DEST_DIR }.pdf" : open( f"{ DEST_DIR }/{ subject }/{ assignment }/{ person }.pdf", f"rb" )}  )
                             send_reply = False
                             
-                        elif os.path.exists( f"hw/{ subject }/{ assignment }/{ person }.pdf" ):
-                            reply_json["content"] = "Here you go"
-                            api_post( f"channels/{channel_id}/messages", None, files= { "hw.pdf" : open( f"hw/{ subject }/{ assignment }/{ person }.pdf", "rb" )}  )
+                        elif os.path.exists( f"{ DEST_DIR }/{ subject }/{ assignment }/{ person }.pdf" ):
+                            reply_json["content"] = f"Here you go"
+                            api_post( f"channels/{channel_id}/messages", None, files= { f"{ DEST_DIR }.pdf" : open( f"{ DEST_DIR }/{ subject }/{ assignment }/{ person }.pdf", f"rb" )}  )
                             send_reply = False
                         else:
-                            reply_json["content"] = "Syntax incorrect"
+                            reply_json["content"] = f"Syntax incorrect"
 
                     case "list" | "ls" : 
                         try:
-                            if  "subject" not in locals(): #List subjects
-                                reply_json["content"] = ", ".join( subjects ) 
-                            elif  "assignment" not in locals(): #List assignments
-                                reply_json["content"] = ", ".join( os.listdir( f"hw/{ subject }" ) )
-                            elif "person" not in locals(): #List files
-                                msg_draft = ""
+                            if  f"subject" not in locals(): #List subjects
+                                reply_json["content"] = f", f".join( subjects ) 
+                            elif  f"assignment" not in locals(): #List assignments
+                                reply_json["content"] = f", f".join( os.listdir( f"{ DEST_DIR }/{ subject }" ) )
+                            elif f"person" not in locals(): #List files
+                                msg_draft = f""
                                 
-                                ratings = json.load( open( f"hw/{ subject }/{ assignment }/.ratings.json" ) )
+                                ratings = json.load( open( f"{ DEST_DIR }/{ subject }/{ assignment }/.ratings.json" ) )
                                 for i in ratings.keys():
                                     try:
                                         msg_draft += f"{ i }:\t { ratings[ i ][ 'rate_value' ] }\n"
@@ -140,49 +143,49 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                                 reply_json["content"] = msg_draft
 
                         except IndexError as e:
-                            reply_json["content"] = "Not enough arguments (probably) "
+                            reply_json["content"] = f"Not enough arguments (probably) f"
                         except Exception as e:
-                            reply_json["content"] = "Failed" + str( e )
+                            reply_json["content"] = f"Failed" + str( e )
                         
                                 
                     case "create":
                         try:
                             try:
-                                os.mkdir( f"hw/{mlist[2]}/{mlist[3]}" )
+                                os.mkdir( f"{ DEST_DIR }/{mlist[2]}/{mlist[3]}" )
                             except:
-                                reply_json["content"] = "Already exists!"
+                                reply_json["content"] = f"Already exists!"
                             ratings = dict()
                             ratings["Name"] = mlist[3]
-                            with open( f"hw/{mlist[2]}/{mlist[3]}/.ratings.json", "w"  ) as f:
+                            with open( f"{ DEST_DIR }/{mlist[2]}/{mlist[3]}/.ratings.json", f"w"  ) as f:
                                 f.write( json.dumps( ratings ) )
-                            reply_json["content"] = "Success"
+                            reply_json["content"] = f"Success"
                         except IndexError as e:
-                            reply_json["content"] = "Not enough arguments (probably) "
+                            reply_json["content"] = f"Not enough arguments (probably) f"
                         except Exception as e:
-                            reply_json["content"] = "Failed" + str( e )
+                            reply_json["content"] = f"Failed" + str( e )
                             
                     case "rate":
                         if len(mlist) ==  6:
                             if rating > 0 and rating < 6: 
 
-                                ratings = json.load( open( f"hw/{subject}/{assignment}/.ratings.json") )
+                                ratings = json.load( open( f"{ DEST_DIR }/{subject}/{assignment}/.ratings.json") )
 
                                 if person in ratings.keys():
-                                    ratings[ person ][ "ratings" ].append( rating )
-                                    ratings[ person ]["rate_value" ]  = sum( ratings[ person ][ "ratings" ] ) / len( ratings[ person ][ "ratings" ] )
+                                    ratings[ person ][ f"ratings" ].append( rating )
+                                    ratings[ person ]["rate_value" ]  = sum( ratings[ person ][ f"ratings" ] ) / len( ratings[ person ][ f"ratings" ] )
                                 else:
                                     ratings[ person ] = dict()
-                                    ratings[ person ][ "ratings" ] = [ rating ]
-                                    ratings[ person ][ "rate_value" ] = rating
+                                    ratings[ person ][ f"ratings" ] = [ rating ]
+                                    ratings[ person ][ f"rate_value" ] = rating
                                     
 
-                                with open( f"hw/{subject}/{assignment}/.ratings.json", "w"  ) as f:
+                                with open( f"{ DEST_DIR }/{subject}/{assignment}/.ratings.json", f"w"  ) as f:
                                     f.write( json.dumps( ratings ) )
-                                reply_json["content"] = "Thanks for rating!"
+                                reply_json["content"] = f"Thanks for rating!"
                             else: 
-                                reply_json["content"] = "Rate between 1 and 5 please"
+                                reply_json["content"] = f"Rate between 1 and 5 please"
                         else:
-                            reply_json["content"] = "Syntax is \"hw rate _subject_ _assignment_ _user_ _rating_\""
+                            reply_json["content"] = f"Syntax is \"hw rate _subject_ _assignment_ _user_ _rating_\""
                             
                     case "join":
                         resp = json.loads( api_post( f"guilds/{ message['guild_id'] }/channels", None, method="GET" ).content.decode() )
@@ -201,24 +204,24 @@ async def message_handler( js, shared_info, voice_info, session_id=None, user=No
                         
                     
                     case "leave":
-                        reply_json["content"] = "Leaving..."
+                        reply_json["content"] = f"Leaving..."
                         await shared_info.put( draft( VOICE_CONNECT, guild=message["guild_id"] ) )
 
                     case "restart":
 
-                        reply_json["content"] = "Soft Reset"
+                        reply_json["content"] = f"Soft Reset"
                         api_post( f"channels/{channel_id}/messages", reply_json ).content 
                         raise SoftReset
 
                     case "restart_hard":
-                        print( "[red]!!!" )
-                        allowed_role = "919190731065806878" 
+                        print( f"[red]!!!" )
+                        allowed_role = f"919190731065806878" 
                         if allowed_role in js["d"]["member"]["roles"]:
-                            reply_json["content"] = "Hard Reset!"
+                            reply_json["content"] = f"Hard Reset!"
                             api_post( f"channels/{channel_id}/messages", reply_json ).content 
                             raise HardReset
                         else:
-                            reply_json["content"] = "Only <@{allowed_role}> can hard reset"
+                            reply_json["content"] = f"Only <@{allowed_role}> can hard reset"
                     case _:
                         reply_json["content"] = f"{mlist[1]} does not look like a subject, assignment or verb"
                     

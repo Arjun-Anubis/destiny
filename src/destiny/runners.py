@@ -2,11 +2,11 @@
 
 
 import importlib
-import destiny.homeworkbot
+import destiny.core
 import destiny.message_handler
 
 def auto_reload(client):
     while True:
         client.run()
-        importlib.reload( homeworkbot )
+        importlib.reload( core )
     
