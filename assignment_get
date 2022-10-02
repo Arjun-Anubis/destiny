@@ -1,0 +1,19 @@
+#!/bin/bash
+curl 'https://assignments.onenote.com/api/v1.0/edu/me/work?%24filter=(%20(%20status%20eq%20microsoft.education.assignments.api.educationAssignmentStatus%27assigned%27%20and%20isCompleted%20eq%20false%20)%20or%20(%20status%20ne%20microsoft.education.assignments.api.educationAssignmentStatus%27assigned%27%20and%20status%20ne%20microsoft.education.assignments.api.educationAssignmentStatus%27draft%27%20and%20status%20ne%20microsoft.education.assignments.api.educationAssignmentStatus%27pending%27%20)%20)&%24top=20&%24orderby=dueDateTime%20desc&$expand=submissions($expand=outcomes),categories,submissionAggregates' \
+  -H 'authority: assignments.onenote.com' \
+  -H 'x-correlationid: 89eed44a-2826-40a4-82a7-97f1570f234e' \
+  -H 'x-usersessionid: b2a0047f-83ad-2f63-df7e-b9446e066c13' \
+  -H 'authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6Ik1yNS1BVWliZkJpaTdOZDFqQmViYXhib1hXMCIsImtpZCI6Ik1yNS1BVWliZkJpaTdOZDFqQmViYXhib1hXMCJ9.eyJhdWQiOiJodHRwczovL29uZW5vdGUuY29tLyIsImlzcyI6Imh0dHBzOi8vc3RzLndpbmRvd3MubmV0LzBlYjk0ZjMyLWIwZjQtNDlhMi1iMmZmLTcwNzZkODI2OTk3NS8iLCJpYXQiOjE2NDMzODEyMjIsIm5iZiI6MTY0MzM4MTIyMiwiZXhwIjoxNjQzMzkwMjQ1LCJhY3IiOiIxIiwiYWlvIjoiQVRRQXkvOFRBQUFBRHhOaUFjeGVpMkdVSjFzT1RUTGF0TXMrWFgyajBzeEg0cVlTOWhuMjFHZDR2Z1pwY2tYenZIQ3VZTjlMMVAvNSIsImFtciI6WyJwd2QiXSwiYXBwaWQiOiI1ZTNjZTZjMC0yYjFmLTQyODUtOGQ0Yi03NWVlNzg3ODczNDYiLCJhcHBpZGFjciI6IjAiLCJmYW1pbHlfbmFtZSI6Ikdob3NoIiwiZ2l2ZW5fbmFtZSI6IkFyanVuIiwiaXBhZGRyIjoiMjIzLjE5MC44MS4yNiIsIm5hbWUiOiJBcmp1biBHaG9zaCIsIm9pZCI6IjFkOWZkZDdlLTlkODktNDMyMy05NGU1LWJmNWZjMDEyM2U4ZCIsInB1aWQiOiIxMDAzMjAwMEMxQjczMjQyIiwicmgiOiIwLkFTc0FNay01RHZTd29rbXlfM0IyMkNhWmRjRG1QRjRmSzRWQ2pVdDE3bmg0YzBZckFQdy4iLCJzY3AiOiJOb3Rlcy5SZWFkV3JpdGUgTm90ZXMuUmVhZFdyaXRlLkFsbCIsInNpZ25pbl9zdGF0ZSI6WyJrbXNpIl0sInN1YiI6IjdveDFFUmIxN2lzNC0wNkZiRWhYeXVoVi1NM0N5ZzJ0cEdvNnBsdkZqXzAiLCJ0aWQiOiIwZWI5NGYzMi1iMGY0LTQ5YTItYjJmZi03MDc2ZDgyNjk5NzUiLCJ1bmlxdWVfbmFtZSI6ImFyanVuLmdob3NoXzAwMnBnMTAxMUBzaGlrc2hhbnRhcnNjaG9vbC5vcmciLCJ1cG4iOiJhcmp1bi5naG9zaF8wMDJwZzEwMTFAc2hpa3NoYW50YXJzY2hvb2wub3JnIiwidXRpIjoiQTdLVTNzRzN1a2ViYWk5WlFkTGpBQSIsInZlciI6IjEuMCJ9.U0dyZZwYpwavTV-BX_IaHLF2nv29mjo9FaOgJJAisqk-9ldr2S4cmeOrvisvRTaIGof0CYq4nrfV5pQKILLTghAH4Xyk8EPUOKywTFmoUHyK1uz19N4bZocco6KKrEpASl7JTs8CRYBN_-Q2Xa2cP3hfpFpfkcMXLcfsmiIrdhAoQn1J_bQ8_ZKyX6Shdn6AOzU5hufjFUXDSK_RmVcMPR4CrNTnqww2pIkHqL-qCqEQhUDq0ixEWXwNvMUCu-yT76aBisBb6qiIQSq5T16CWgq_YXuUtZoC_KxqsQtlQ0OFS91bhDni00pvUrGOkz1C6SVGtbIf9gnmlSk6CBEcyA' \
+  -H 'x-aui-version: aui.v20220122.1' \
+  -H 'accept: application/json, text/plain, */*' \
+  -H 'ms-int-appid: assignments-ui' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36' \
+  -H 'x-ms-isweekview: undefined' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -H 'dnt: 1' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'referer: https://assignments.onenote.com/classes/all/list' \
+  -H 'cookie: MicrosoftApplicationsTelemetryDeviceId=a9e4c6cf-e214-4c4e-bd35-1b13b67e247e; MicrosoftApplicationsTelemetryFirstLaunchTime=2022-01-20T18:22:39.616Z' \
+  --compressed
