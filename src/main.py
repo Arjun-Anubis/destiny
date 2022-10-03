@@ -35,17 +35,60 @@ class custom_client( core.Client ):
         dual = f2.parse( contents )
         ternary = f3.parse( contents )
 
+        if ternary:
+            verb = ternary.named["verb"].strip()
+            arg1 = ternary.named["arg1"].strip()
+            arg2 = ternary.named["arg2"].strip()
 
-        if singular:
-            primary = singular.named["verb"]
 
-            log.info( f"Matched singular verb, primary is { primary }" )
-            if search( "ls", primary ):
+            if search( "ls", verb ):
+                log.info( "Matched ls (ternary)" )
+
+                # running special check for files
+
+                try:
+                    files = os.listdir( f"{DEST_DIR}/{arg1}/{arg2}" )
+                except:
+                    self.message( message.channel_id, Message( content="Sorry, We are unable to find that assignment" ) )
+                    return
+                self.message( message.channel_id, Message( content=files.__str__()) )
+            elif search( "pull", verb ):
+                log.info( "Matched pull (ternary)" )
+                self.message( message.channel_id, Message( content="Here you go" ), files={ "anubi.pdf" : open( f"{DEST_DIR}/{arg1}/{arg2}/anubi.pdf" ) } ) 
+
+        elif dual:
+            verb = dual.named["verb"].strip()
+            arg1 = dual.named["arg1"].strip()
+
+            log.info( f"Matched dual verb, verb is { verb }, argument is { arg1 }" )
+
+            if search( "ls", verb ):
+                log.info( "Matched ls (dual)" )
+
+                # running special check for subject
+
+                log.info( f"Looking in {DEST_DIR}/{arg1}." )
+                try:
+                    assignments = os.listdir( f"{DEST_DIR}/{arg1}" )
+                except:
+                    self.message( message.channel_id, Message( content="Sorry, We are unable to find that subject" ) )
+                    return
+            
+
+
+                self.message( message.channel_id, Message( content=assignments.__str__()) )
+
+        elif singular:
+            verb = singular.named["verb"].strip()
+
+            log.info( f"Matched singular verb, verb is { verb }" )
+            if search( "ls", verb ):
                 log.info( "Matched ls (singular)" )
+
                 channel_id = message.channel_id
                 draft = Message( content=subjects.__str__() )
-                log.info( draft.content )
                 self.message( channel_id, draft )
+
 
 
         

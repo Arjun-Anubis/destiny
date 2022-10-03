@@ -207,8 +207,8 @@ class Client():
         log.info( f"Sending payload { data }" )
         return requests.request( method,  f"{rest_url}{subdivision}", headers=HEADERS, data=data, **kwargs )
 
-    def message( self, channel_id, message ):
-        return self._api_post( f"channels/{channel_id}/messages", message._dict)
+    def message( self, channel_id, message, **kwargs):
+        return self._api_post( f"channels/{channel_id}/messages", message._dict, **kwargs)
 
     async def voice_beat( self, voice_socket, voicebeat_interval ):
         while True:
