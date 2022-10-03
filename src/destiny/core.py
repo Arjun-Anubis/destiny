@@ -15,12 +15,6 @@ import destiny.asyncudp as asyncudp
 
 # rich
 
-from rich import inspect
-from rich.live import Live
-from rich.table import Table
-from rich.panel import Panel
-from rich.text import Text
-from rich.traceback import install
 
 
 # pip installed 
@@ -46,26 +40,13 @@ import json
 import traceback
  
 
-# installing rich traceback
-install()
 
-from rich.logging import RichHandler
-
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(markup=True)]
-)
-
-log = logging.getLogger("rich")
         
 class Client():
-    def __init__( self, msg_handler=default_handlers.message_handler, cg_handler=default_handlers.cg_handler, misc_handler=default_handlers.misc_handler ):
+    def __init__( self ):
         """
         A client object is an instance of the discord bot, it takes three parameters, a message handler, a cg handler and a miscellanous handler. The defaults are specified in defaul_handler.py
         """
-        self.message_handler = msg_handler
-        self.cg_handler = cg_handler
-        self.misc_handler = misc_handler
         
     def run( self ):
         while True:
@@ -86,13 +67,10 @@ class Client():
 
         log.info("[green] Initializing IPC..." )
 
-        queues = {
-                "shared" : asyncio.Queue( 30 ),
-                "voice" : asyncio.Queue( 30 ),
-                "heartbeat" : asyncio.Queue(1),
-                "session" : {}
-                }
-        self.queues = queues
+        self.event_queue = asyncio.Queue(30)
+        self.voice_queue = asyncio.Queue(30)
+        self.heartbeat = asyncio.Queue(1)
+        self.session = {}
 
 
         async with websockets.connect(url, ping_timeout=None, ping_interval=None) as websocket:
@@ -120,7 +98,7 @@ class Client():
         if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
             log.info( "Received ready" )
             log.info( ready )
-            self.queues["session"] = {
+            self.session = {
                     "session_id" : ready["d"]["session_id"],
                     "user" : ready["d"]["user"]
                     }
@@ -139,9 +117,6 @@ class Client():
         print ( "All done with main websoc" )
 
     async def websoc_handler( self, websocket ):
-        session_info = self.queues["session"]
-        shared_info = self.queues["shared"]
-        voice_info = self.queues["voice"]
 
         while True:
             js = json.loads( await websocket.recv() )
@@ -179,7 +154,7 @@ class Client():
                     Heart beat acknowledged
                     """
                     log.info( "[cyan bold]Putting acknowledge on queue" )
-                    await self.queues["heartbeat"].put(js)
+                    await self.heartbeat.put(js)
 
                     pass
                 case _:
@@ -188,7 +163,7 @@ class Client():
 
     async def send( self, websocket ):
         while True:
-            await websocket.send( await self.queues["shared"].get() )
+            await websocket.send( await self.event_queue.get() )
             log.info( "Sent message from queue" )
 
     async def heart_beat( self, websocket, heartbeat_interval ):
@@ -198,19 +173,19 @@ class Client():
             heartbeat = structs.Heartbeat()
             await websocket.send( heartbeat.pack() )
 
-            heartbeat_acknowledge = await self.queues["heartbeat"].get()
+            heartbeat_acknowledge = await self.heartbeat.get()
             log.info("[green]Received acknowledgement on queue, waiting...")
 
             jitter = random.random()
             await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
 
     async def voice( self  ):
-        voice_update = await self.queues["voice"].get()
+        voice_update = await self.voice_queue.get()
         async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as voice_socket:
             try:
                 js = json.loads( await voice_socket.recv() )
                 if js[ "op" ] == 8:
-                    resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : self.queues["session"][ "user" ][ "id" ], "session_id" : self.queues["session"][ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
+                    resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : self.session[ "user" ][ "id" ], "session_id" : self.session[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
                     await voice_socket.send( resp )
                     op2 = await voice_socket.recv()
                     op2 = json.loads( op2 )
@@ -228,6 +203,12 @@ class Client():
             except websockets.ConnectionClosed as e:
                 inspect ( e )
             
+    def _api_post( self, subdivision, data, method="POST", **kwargs ): # add post to constants
+        log.info( f"Sending payload { data }" )
+        return requests.request( method,  f"{rest_url}{subdivision}", headers=HEADERS, data=data, **kwargs )
+
+    def message( self, channel_id, message ):
+        return self._api_post( f"channels/{channel_id}/messages", message._dict)
 
     async def voice_beat( self, voice_socket, voicebeat_interval ):
         while True:
@@ -374,9 +355,9 @@ class Client():
         match dispatch.type:
 
             case "MESSAGE_CREATE":
+                log.info(dispatch.data)
                 message = structs.Message( **dispatch.data )
                 await self.on_message( message )
-                # await self.message_handler( js, shared_info, voice_info, **session_info ) 
 
             case "VOICE_SERVER_UPDATE":
                 print ( js )
@@ -386,12 +367,14 @@ class Client():
                 voice_update[ "voice_token" ] = js[ "d" ][ "token" ]
                 await voice_info.put( voice_update )
             case "GUILD_CREATE":
-                await self.cg_handler( dispatch._dict, self.queues["shared"], self.queues["voice"], **self.queues["session"] )
-                # await self.cg_handler( js, shared_info, voice_info, **session_info ) 
+                await self.on_guild_create( )
                    
             case _:
-                # await self.misc_handler( js, shared_info, voice_info, **session_info ) 
-                await self.misc_handler( dispatch._dict, self.queues["shared"], self.queues["voice"], **self.queues["session"] )
-    # @required
-    async def on_message( message : structs.Message ):
-        await self.message_handler( dispatch._dict, self.queues["shared"], self.queues["voice"], **self.queues["session"] )
+                await self.on_unimplimented( )
+
+    async def on_message( self, message : structs.Message ):
+        pass
+    async def on_guild_create( self ):
+        pass
+    async def on_unimplimented( self ):
+        pass

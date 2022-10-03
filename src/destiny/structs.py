@@ -1,8 +1,5 @@
 import json
-from rich import print
-from rich import pretty
-from rich import inspect
-pretty.install()
+from destiny.header import *
 
 
 class base_struct:
@@ -47,13 +44,71 @@ class recv_event( event ):
             # }
     def __getattr__( self, attr ):        
         return self._dict[ attr ]
+    def __getitem__( self, attr ):
+        return self._dict[ attr ]
 
+class User( recv_event ):
+    _lookup = {
+            "id" : "id",
+            "username" : "username",
+            "discriminator" : "discriminator",
+            "avatar" : "avatar",
+            "bot" : "is_bot",
+            "system" : "is_system",
+            "mfa_enabled" : "is_mfa_enabled",
+            "banner" : "banner",
+            "accent_color" :"accent_color",
+            "locale" : "locale",
+            "verified" : "is_verified",
+            "email" : "email",
+            "flags": "flags",
+            "premium_type" : "premium_type",
+            "public_flags" : "public_flags",
+
+
+            "avatar_decoration" : "avatar_decoration"
+            }
 
 class Dispatch( recv_event ):
     pass
 
 class Message( recv_event ):
-    pass
+    _lookup = {
+            "id" : "id",
+            "channel_id": "channel_id",
+            "author": "author",
+            "content" : "content",
+            "timestamp" : "time",
+            "edited_timestamp" : "edited_time",
+            "tts" : "tts",
+            "mention_everyone" : "mention_everyone",
+            "mentions" : "mentions",
+            "mention_roles" :"mention_roles",
+            "mention_channels" : "mention_channels",
+            "attachments" : "attachments",
+            "embeds" : "embeds",
+            "reactions" : "reactions",
+            "nonce" : "nonce",
+            "pinned" : "pinned",
+            "webhook_id" : "webhook_id",
+            "type" : "type",
+            "activity" : "activity",
+            "application": "app",
+            "application_id" : "app_id",
+            "message_reference" : "message_reference",
+            "flags" : "flags",
+            "referenced_message": "referenced_message",
+            "interaction" : "interaction",
+            "thread" : "thread",
+            "components" : "components",
+            "sticker_items" : "sticker_items",
+            "stickers" : "stickers",
+            "position" : "position",
+
+
+            "guild_id" : "guild_id",
+            "member" : "member",
+            }
 
 
 class network_properties( base_struct ):

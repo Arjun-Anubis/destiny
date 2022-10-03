@@ -7,7 +7,7 @@ import json
 from destiny.convenience import api_post, draft
 
 
-DEST_DIR = "../assets/hw"
+# DEST_DIR = "../assets/hw"
 
 def restart():
     import sys
