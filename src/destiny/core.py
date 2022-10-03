@@ -5,6 +5,7 @@ from destiny.api_constants import *
 from destiny.exceptions import *
 from destiny.convenience import api_post, draft
 import destiny.default_handlers as default_handlers
+import destiny.structs as structs
 
 
 import opus
@@ -56,15 +57,6 @@ logging.basicConfig(
 )
 
 log = logging.getLogger("rich")
-
-
-class gateway_message:
-    def __init__( self, opcode ):
-
-        self.opcode = opcode
-
-    def send( self ):
-
         
 class Client():
     def __init__( self, msg_handler=default_handlers.message_handler, cg_handler=default_handlers.cg_handler, misc_handler=default_handlers.misc_handler ):
@@ -117,11 +109,16 @@ class Client():
             heartbeat_interval = hello_event[ "d" ][ "heartbeat_interval" ] 
         del hello_event
 
-        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval, queues["heartbeat"] ) )
 
-        await websocket.send( draft( IDENTIFY ) )
+        log.info( "Sending identify" )
+        identify_message = structs.Identify( structs.config_identify( token=token, intents=641, properties=structs.network_properties( os="linux" ) ) ) 
+        await websocket.send( identify_message.pack() )
+        # await websocket.send( draft( IDENTIFY ) )
+
         ready = json.loads( await websocket.recv() )
         if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
+            log.info( "Received ready" )
+            log.info( ready )
             queues["session"] = {
                     "session_id" : ready["d"]["session_id"],
                     "user" : ready["d"]["user"]
@@ -131,6 +128,7 @@ class Client():
         websoc_handler_task = asyncio.create_task( self.websoc_handler( websocket, queues ) )
         send_task = asyncio.create_task( self.send( websocket, queues["shared"] ) )
         voice_main_task = asyncio.create_task( self.voice( queues["session"], queues["voice"] ) )
+        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval, queues["heartbeat"] ) )
         
         await heartbeat_task
         await websoc_handler_task
@@ -209,12 +207,16 @@ class Client():
 
     async def heart_beat( self, websocket, heartbeat_interval, heartbeat_queue ):
         while True:
-            jitter = random.random()
-            await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
             log.info("[yellow]Sending heartbeat")
-            await websocket.send( json.dumps( HEART_BEAT_JSON ) )
+
+            heartbeat = structs.Heartbeat()
+            await websocket.send( heartbeat.pack() )
+
             heartbeat_acknowledge = await heartbeat_queue.get()
             log.info("[green]Received acknowledgement on queue, waiting...")
+
+            jitter = random.random()
+            await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
 
     async def voice( self, session_info, voice_info ):
         voice_update = await voice_info.get()
