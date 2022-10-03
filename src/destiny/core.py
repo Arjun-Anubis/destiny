@@ -2,7 +2,7 @@
 # local
 from destiny.header import *
 from destiny.api_constants import *
-from destiny.exceptions import HardReset, SoftReset
+from destiny.exceptions import *
 from destiny.convenience import api_post, draft
 import destiny.default_handlers as default_handlers
 
@@ -52,10 +52,19 @@ from rich.logging import RichHandler
 
 FORMAT = "%(message)s"
 logging.basicConfig(
-    level="DEBUG", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(markup=True)]
+    level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(markup=True)]
 )
 
 log = logging.getLogger("rich")
+
+
+class gateway_message:
+    def __init__( self, opcode ):
+
+        self.opcode = opcode
+
+    def send( self ):
+
         
 class Client():
     def __init__( self, msg_handler=default_handlers.message_handler, cg_handler=default_handlers.cg_handler, misc_handler=default_handlers.misc_handler ):
@@ -88,12 +97,12 @@ class Client():
         queues = {
                 "shared" : asyncio.Queue( 30 ),
                 "voice" : asyncio.Queue( 30 ),
-                "heartbeat" : asyncio.Queue(1)
+                "heartbeat" : asyncio.Queue(1),
+                "session" : {}
                 }
 
 
         async with websockets.connect(url, ping_timeout=None, ping_interval=None) as websocket:
-
             main_websocket_task = asyncio.create_task( self._init_websocket( websocket, queues ) )
             await main_websocket_task
         
@@ -101,22 +110,18 @@ class Client():
     async def _init_websocket( self, websocket, queues ):
 
 
+        log.info( "Initializing websocket" )
+
         hello_event = json.loads( await websocket.recv() )
         if hello_event[ "op" ] == HELLO_EVENT:
             heartbeat_interval = hello_event[ "d" ][ "heartbeat_interval" ] 
+        del hello_event
 
+        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval, queues["heartbeat"] ) )
 
-
-        # Should be some logic here
         await websocket.send( draft( IDENTIFY ) )
-
-
         ready = json.loads( await websocket.recv() )
-        log.info( ready )
         if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
-            # session_info = dict()
-            # session_info[ "session_id" ] = ready["d"][ "session_id" ]
-            # session_info[ "user" ] = ready[ "d" ][ "user" ]
             queues["session"] = {
                     "session_id" : ready["d"]["session_id"],
                     "user" : ready["d"]["user"]
@@ -127,8 +132,6 @@ class Client():
         send_task = asyncio.create_task( self.send( websocket, queues["shared"] ) )
         voice_main_task = asyncio.create_task( self.voice( queues["session"], queues["voice"] ) )
         
-        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval, queues["heartbeat"] ) )
-
         await heartbeat_task
         await websoc_handler_task
         await send_task
@@ -147,6 +150,9 @@ class Client():
 
             match js["op"]:
                 case 0:
+                    """
+                    Dispatch
+                    """
                     match js[ "t" ]:
 
                         case "MESSAGE_CREATE":
@@ -165,27 +171,50 @@ class Client():
                         case _:
                             await self.misc_handler( js, shared_info, voice_info, **session_info ) 
                             
+                case 7:
+                    """
+                    Reconnect
+                    """
+                    log.warning("Reconnecting because server said so")
+                case 9:
+                    """
+                    Session Invalid
+                    """
+                    log.error("Session Invalid")
+                    raise SessionInvalid
+                case 10:
+                    """
+                    Hello
+
+                    Shouldnt be sent after first connect,
+                    """
+                    log.error( "Should not receive this, hello after connection established" )
+                    raise ErrOpcode
                 case 11:
-                    info( "[cyan bold]Heartbeat: " )
-                    queues["heartbeat"].put(js)
+                    """
+                    Heart beat acknowledged
+                    """
+                    log.info( "[cyan bold]Putting acknowledge on queue" )
+                    await queues["heartbeat"].put(js)
 
                     pass
                 case _:
-                    print (js)
-    async def send( self, websocket, shared_info ):
+                    log.error("Unrecognised op code")
+                    raise UnkownOpcode
+
+    async def send( self, websocket, queue ):
         while True:
-            buffer_send = await shared_info.get()
-            await websocket.send( buffer_send )
+            await websocket.send( await queue.get() )
+            log.info( "Sent message from queue" )
 
     async def heart_beat( self, websocket, heartbeat_interval, heartbeat_queue ):
         while True:
             jitter = random.random()
             await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
-            log.info("Sending heartbeat")
+            log.info("[yellow]Sending heartbeat")
             await websocket.send( json.dumps( HEART_BEAT_JSON ) )
             heartbeat_acknowledge = await heartbeat_queue.get()
-            log.info("Heartbeat Acknowledge")
-            log.info( heartbeat_acknowledge )
+            log.info("[green]Received acknowledgement on queue, waiting...")
 
     async def voice( self, session_info, voice_info ):
         voice_update = await voice_info.get()
