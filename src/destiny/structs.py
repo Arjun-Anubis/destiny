@@ -21,14 +21,40 @@ class base_struct:
         self.update()
     def update( self ):
         super().__setattr__( "_json", json.dumps( self.pack() ) )
-    def  pack( self ):
+    def  pack( self ) -> str:
         return json.dumps( self._dict )
 
-class gateway_message( base_struct ):
+class event( base_struct ):
+    pass
+
+class send_event( event ):
     _lookup = {
             "opcode" : "op",
             "data" : "d"
             }
+class recv_event( event ):
+    _lookup = {
+            "op" : "opcode",
+            "t" : "type",
+            "s" : "serial",
+            "d" : "data"
+            }
+    # __get_lookup = {
+    #         "opcode" : "op",
+    #         "data" : "d",
+    #         "serial" : "s",
+    #         "type" : "t"
+            # }
+    def __getattr__( self, attr ):        
+        return self._dict[ attr ]
+
+
+class Dispatch( recv_event ):
+    pass
+
+class Message( recv_event ):
+    pass
+
 
 class network_properties( base_struct ):
     _lookup = {
@@ -55,14 +81,14 @@ class config_identify( base_struct ):
             "comp": False,
             "threshhold" : 50
             }
-    def __init__( self, token, properties, intents, **kwargs ):
+    def __init__( self, token: str, properties: network_properties, intents: int, **kwargs ):
         super().__init__( **kwargs )
         self.token = token
         self.properties = properties._dict
         self.intents = intents
 
 
-class Heartbeat( gateway_message ):
+class Heartbeat( send_event ):
     """
     A heartbeat struct, generally, no arguments, can set opcode( not reommended ) and data ( not recommended but harmless )
     Could result in error 4002, could not parse, from server
@@ -72,7 +98,7 @@ class Heartbeat( gateway_message ):
             "data" : None
             }
 
-class Identify( gateway_message ):
+class Identify( send_event ):
     """
     An identify struct, takes one argument, config, of type, config_identify, which configures token, properties, compression, presence and intents
 
@@ -83,9 +109,12 @@ class Identify( gateway_message ):
             "opcode" : 2
             }
 
-    def __init__( self, config, **kwargs ):
+    def __init__( self, config: config_identify, **kwargs ):
         super().__init__( **kwargs )
         self.data = config._dict
+
+# Add remaining gateway codes Resume, request guild members, update voice state, update presence
+
 
 
 ## Tests
@@ -93,7 +122,7 @@ class Identify( gateway_message ):
 if __name__ == "__main__":
     
     print( "Testing gateway message" )
-    gm = gateway_message( opcode=10, data = gateway_message( opcode=9 ).pack() )
+    gm = send_event( opcode=10, data = gateway_message( opcode=9 ).pack() )
     inspect( gm, private=True )
     del gm
 

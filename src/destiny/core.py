@@ -92,14 +92,15 @@ class Client():
                 "heartbeat" : asyncio.Queue(1),
                 "session" : {}
                 }
+        self.queues = queues
 
 
         async with websockets.connect(url, ping_timeout=None, ping_interval=None) as websocket:
-            main_websocket_task = asyncio.create_task( self._init_websocket( websocket, queues ) )
+            main_websocket_task = asyncio.create_task( self._init_websocket( websocket ) )
             await main_websocket_task
         
     
-    async def _init_websocket( self, websocket, queues ):
+    async def _init_websocket( self, websocket ):
 
 
         log.info( "Initializing websocket" )
@@ -119,16 +120,16 @@ class Client():
         if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
             log.info( "Received ready" )
             log.info( ready )
-            queues["session"] = {
+            self.queues["session"] = {
                     "session_id" : ready["d"]["session_id"],
                     "user" : ready["d"]["user"]
                     }
         del ready
 
-        websoc_handler_task = asyncio.create_task( self.websoc_handler( websocket, queues ) )
-        send_task = asyncio.create_task( self.send( websocket, queues["shared"] ) )
-        voice_main_task = asyncio.create_task( self.voice( queues["session"], queues["voice"] ) )
-        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval, queues["heartbeat"] ) )
+        websoc_handler_task = asyncio.create_task( self.websoc_handler( websocket ) )
+        send_task = asyncio.create_task( self.send( websocket ) )
+        voice_main_task = asyncio.create_task( self.voice() )
+        heartbeat_task = asyncio.create_task( self.heart_beat( websocket, heartbeat_interval ) )
         
         await heartbeat_task
         await websoc_handler_task
@@ -137,37 +138,22 @@ class Client():
 
         print ( "All done with main websoc" )
 
-    async def websoc_handler( self, websocket, queues ):
-        session_info = queues["session"]
-        shared_info = queues["shared"]
-        voice_info = queues["voice"]
+    async def websoc_handler( self, websocket ):
+        session_info = self.queues["session"]
+        shared_info = self.queues["shared"]
+        voice_info = self.queues["voice"]
 
         while True:
-            raw =  await websocket.recv()
-            js = json.loads( raw )
+            js = json.loads( await websocket.recv() )
+
 
             match js["op"]:
                 case 0:
                     """
                     Dispatch
                     """
-                    match js[ "t" ]:
-
-                        case "MESSAGE_CREATE":
-                            await self.message_handler( js, shared_info, voice_info, **session_info ) 
-
-                        case "VOICE_SERVER_UPDATE":
-                            print ( js )
-                            voice_update = dict()
-                            voice_update[ "voice_url" ] = f'wss://{ js[ "d" ][ "endpoint" ] }'
-                            voice_update[ "voice_guild_id" ] = js[ "d" ][ "guild_id" ]
-                            voice_update[ "voice_token" ] = js[ "d" ][ "token" ]
-                            await voice_info.put( voice_update )
-                        case "GUILD_CREATE":
-                            await self.cg_handler( js, shared_info, voice_info, **session_info ) 
-                               
-                        case _:
-                            await self.misc_handler( js, shared_info, voice_info, **session_info ) 
+                    dispatch = structs.Dispatch( **js )
+                    await self._on_dispatch( dispatch )
                             
                 case 7:
                     """
@@ -193,38 +179,38 @@ class Client():
                     Heart beat acknowledged
                     """
                     log.info( "[cyan bold]Putting acknowledge on queue" )
-                    await queues["heartbeat"].put(js)
+                    await self.queues["heartbeat"].put(js)
 
                     pass
                 case _:
                     log.error("Unrecognised op code")
                     raise UnkownOpcode
 
-    async def send( self, websocket, queue ):
+    async def send( self, websocket ):
         while True:
-            await websocket.send( await queue.get() )
+            await websocket.send( await self.queues["shared"].get() )
             log.info( "Sent message from queue" )
 
-    async def heart_beat( self, websocket, heartbeat_interval, heartbeat_queue ):
+    async def heart_beat( self, websocket, heartbeat_interval ):
         while True:
             log.info("[yellow]Sending heartbeat")
 
             heartbeat = structs.Heartbeat()
             await websocket.send( heartbeat.pack() )
 
-            heartbeat_acknowledge = await heartbeat_queue.get()
+            heartbeat_acknowledge = await self.queues["heartbeat"].get()
             log.info("[green]Received acknowledgement on queue, waiting...")
 
             jitter = random.random()
             await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
 
-    async def voice( self, session_info, voice_info ):
-        voice_update = await voice_info.get()
+    async def voice( self  ):
+        voice_update = await self.queues["voice"].get()
         async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as voice_socket:
             try:
                 js = json.loads( await voice_socket.recv() )
                 if js[ "op" ] == 8:
-                    resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : session_info[ "user" ][ "id" ], "session_id" : session_info[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
+                    resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : self.queues["session"][ "user" ][ "id" ], "session_id" : self.queues["session"][ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
                     await voice_socket.send( resp )
                     op2 = await voice_socket.recv()
                     op2 = json.loads( op2 )
@@ -379,3 +365,33 @@ class Client():
 
 
         voice_socket.close()
+
+    async def _on_dispatch( self, dispatch : structs.Dispatch ):
+        """
+        Handle Dispatch
+        Override at your own risk
+        """
+        match dispatch.type:
+
+            case "MESSAGE_CREATE":
+                message = structs.Message( **dispatch.data )
+                await self.on_message( message )
+                # await self.message_handler( js, shared_info, voice_info, **session_info ) 
+
+            case "VOICE_SERVER_UPDATE":
+                print ( js )
+                voice_update = dict()
+                voice_update[ "voice_url" ] = f'wss://{ js[ "d" ][ "endpoint" ] }'
+                voice_update[ "voice_guild_id" ] = js[ "d" ][ "guild_id" ]
+                voice_update[ "voice_token" ] = js[ "d" ][ "token" ]
+                await voice_info.put( voice_update )
+            case "GUILD_CREATE":
+                await self.cg_handler( dispatch._dict, self.queues["shared"], self.queues["voice"], **self.queues["session"] )
+                # await self.cg_handler( js, shared_info, voice_info, **session_info ) 
+                   
+            case _:
+                # await self.misc_handler( js, shared_info, voice_info, **session_info ) 
+                await self.misc_handler( dispatch._dict, self.queues["shared"], self.queues["voice"], **self.queues["session"] )
+    # @required
+    async def on_message( message : structs.Message ):
+        await self.message_handler( dispatch._dict, self.queues["shared"], self.queues["voice"], **self.queues["session"] )
