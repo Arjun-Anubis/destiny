@@ -1,7 +1,6 @@
 import destiny
 import destiny.core as core
 import destiny.default_handlers as default_handlers
-import destiny.message_handler as message_handler
 import destiny.runners
 from destiny.header import *
 from destiny.structs import *
@@ -22,18 +21,24 @@ class custom_client( core.Client ):
         me = User( **self.session["user"] )
         # inspect( me, private=True )
 
+        log.info( f"{author.username}: {message.content}" )
         if ( me.id == author.id ):
             return
         
         f1= compile( prefix + "{verb}" )
         f2= compile( prefix + "{verb} {arg1}" )
         f3= compile( prefix + "{verb} {arg1} {arg2}" )
+        f4= compile( "ping" )
         
         contents = message.content
 
         singular = f1.parse( contents )
         dual = f2.parse( contents )
         ternary = f3.parse( contents )
+
+        if f4.parse( contents ):
+            log.info( self.message( message.channel_id, Message( content="Pong!" )  ) )
+
 
         if ternary:
             verb = ternary.named["verb"].strip()
@@ -88,11 +93,25 @@ class custom_client( core.Client ):
                 channel_id = message.channel_id
                 draft = Message( content=subjects.__str__() )
                 self.message( channel_id, draft )
+            elif search( "join", verb ):
+                log.info( "Matched join (singular)" )
 
+                voice_channels = [ channel for channel in self.query_channels( message.guild_id ) if channel.type == 2 ]
+
+                log.info( f"Voice Channels")
+
+                selected_channel = voice_channels[0]
+                log.info( selected_channel )
+                self.message( message.channel_id, Message( content=f"Joining {str(selected_channel)}" ) )
+                await self.join_voice_channel( message.guild_id, selected_channel, self_mute=True )
+
+
+    async def on_guild_create( self, dispatch ):
+        log.info( f"[green]{ self.session['user']['username'] } is Online!" )
 
 
         
 
-
-client = custom_client( )
+config = config_identify( token=token, intents=641, properties=network_properties( os="linux" ) ) 
+client = custom_client( config )
 destiny.runners.auto_reload(client)

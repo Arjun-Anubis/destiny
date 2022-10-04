@@ -28,7 +28,7 @@ def api_post( subdivision, data, files=None, method="POST" ):
             
     except Exception as e:
         print(e)
-def draft( code ,guild=None, channel=None ):
+def draft( code ,guild=None, channel=None ) -> str:
 
     response = {  "op" : code }
     d = {}

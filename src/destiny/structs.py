@@ -1,27 +1,78 @@
 import json
 from destiny.header import *
 
+class Result:
+    def __init__( self, result: bool ):
+        self.result = result
+    def __bool__( self ):
+        return bool( self.result )
 
-class base_struct:
+class structure:
     _defaults = {}
 
+    def _pre_init( self ):
+        pass
+    def _post_init( self ):
+        pass
+
     def __init__( self, **kwargs ):
+        self._pre_init()
         super().__setattr__( "_dict", dict() )
         for key in self._defaults:
             self.__setattr__( key, self._defaults[key] )
         for key in kwargs:
             self.__setattr__( key, kwargs[key] )
         super().__setattr__( "_json", json.dumps( self.pack() ) )
+        self._post_init()
 
+    def __str__( self ):
+        return f"<{self.__class__.__name__}>\n{self._dict}"
+    def __repr__( self ):
+        return f"<{self.__class__.__name__}>\n{self._dict}"
+
+    def __getattr__( self, attr ):        
+        return self._dict[ attr ]
+    def __getitem__( self, attr ):
+        return self._dict[ attr ]
+
+class implimented_structure( structure ):
+    def  pack( self ) -> str:
+        return json.dumps( self._dict )
     def __setattr__( self, name, value ):
         self._dict.update( {self._lookup[name]: value} )
         self.update()
     def update( self ):
         super().__setattr__( "_json", json.dumps( self.pack() ) )
-    def  pack( self ) -> str:
-        return json.dumps( self._dict )
 
-class event( base_struct ):
+
+class unimplimented_structure( structure ): 
+    """
+    Immuatble Wrapper json
+    """
+    def __init__( self, data: dict(), **kwargs ):
+        self._pre_init()
+        self._dict = data 
+        for key in self._dict:
+            if  type( self._dict[key] ) == type( dict() ):
+                self._dict[key] = unimplimented_structure( self._dict[key] ) # recursive
+        self._post_init()
+
+
+class Channel( unimplimented_structure ):
+    def __str__( self ):
+        return self.name
+    def __repr__( self ):
+        return self.name
+
+class Guild( unimplimented_structure ):
+    def __str__( self ):
+        return self.name
+    def __repr__( self ):
+        return self.name
+
+
+
+class event( implimented_structure ):
     pass
 
 class send_event( event ):
@@ -36,16 +87,6 @@ class recv_event( event ):
             "s" : "serial",
             "d" : "data"
             }
-    # __get_lookup = {
-    #         "opcode" : "op",
-    #         "data" : "d",
-    #         "serial" : "s",
-    #         "type" : "t"
-            # }
-    def __getattr__( self, attr ):        
-        return self._dict[ attr ]
-    def __getitem__( self, attr ):
-        return self._dict[ attr ]
 
 class User( recv_event ):
     _lookup = {
@@ -74,18 +115,18 @@ class Dispatch( recv_event ):
 
 class Message( recv_event ):
     _lookup = {
-            "id" : "id",
-            "channel_id": "channel_id",
-            "author": "author",
-            "content" : "content",
+            "id" : "id", #string
+            "channel_id": "channel_id", #string
+            "author": "author", #object _author_
+            "content" : "content", #string
             "timestamp" : "time",
             "edited_timestamp" : "edited_time",
-            "tts" : "tts",
+            "tts" : "tts", #bool
             "mention_everyone" : "mention_everyone",
             "mentions" : "mentions",
             "mention_roles" :"mention_roles",
             "mention_channels" : "mention_channels",
-            "attachments" : "attachments",
+            "attachments" : "attachments", #list object
             "embeds" : "embeds",
             "reactions" : "reactions",
             "nonce" : "nonce",
@@ -111,7 +152,7 @@ class Message( recv_event ):
             }
 
 
-class network_properties( base_struct ):
+class network_properties( implimented_structure ):
     _lookup = {
             "os" : "os",
             "lib": "browser",
@@ -123,7 +164,7 @@ class network_properties( base_struct ):
             "dev" : "destiny"
             }
 
-class config_identify( base_struct ):
+class config_identify( implimented_structure ):
     _lookup = {
             "token" : "token",
             "properties" : "properties",
@@ -152,6 +193,32 @@ class Heartbeat( send_event ):
             "opcode" : 1,
             "data" : None
             }
+
+class Update_Voice_State( send_event ):
+    _defaults = {
+            "opcode" : 4,
+
+            }
+class Voice_State( implimented_structure ):
+    """
+    A update voice state struct, has a few arguments to initalize values channel_id, guild_id, self_mute, self_deaf
+    """
+    _lookup = {
+            "channel_id" : "channel_id",
+            "self_mute" : "self_mute",
+            "guild_id" : "guild_id",
+            "self_deaf" : "self_deaf"
+            }
+
+    _defaults = {
+            "channel_id" : None, # leave by default
+            "self_mute" : False,
+            "self_deaf" : False
+            }
+    def __init__( self, guild_id, channel: Channel, **kwargs ):
+        super().__init__( **kwargs )
+        self.guild_id = guild_id
+        self.channel_id = channel.id
 
 class Identify( send_event ):
     """

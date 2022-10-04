@@ -3,6 +3,5 @@
 
 import importlib
 import homeworkbot
-import message_handler
 import default_handlers
 import runners

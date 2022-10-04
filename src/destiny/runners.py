@@ -3,7 +3,7 @@
 
 import importlib
 import destiny.core
-import destiny.message_handler
+# import destiny.message_handler
 
 def auto_reload(client):
     while True:
