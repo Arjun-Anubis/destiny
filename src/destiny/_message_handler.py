@@ -4,7 +4,6 @@ import asyncio
 import requests
 import os
 import json
-from destiny.convenience import api_post, draft
 
 
 # DEST_DIR = "../assets/hw"

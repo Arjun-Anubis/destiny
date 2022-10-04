@@ -1,6 +1,5 @@
 import destiny
 import destiny.core as core
-import destiny.default_handlers as default_handlers
 import destiny.runners
 from destiny.header import *
 from destiny.structs import *

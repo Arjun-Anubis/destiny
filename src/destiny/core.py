@@ -1,10 +1,9 @@
 #!/bin/python3.11
 # local
 from destiny.header import *
-from destiny.api_constants import *
+# from destiny.api_constants import # Deprecated
 from destiny.exceptions import *
-# from destiny.convenience import api_post, draft
-import destiny.default_handlers as default_handlers
+# import destiny.default_handlers as default_handlers
 import destiny.structs as structs
 
 
@@ -132,7 +131,7 @@ class Client():
 
                 # Create class structure TODO
                 hello_event = json.loads( await self._websocket.recv() )
-                if hello_event[ "op" ] == HELLO_EVENT:
+                if hello_event[ "op" ] == 10:
                     heartbeat_interval = hello_event[ "d" ][ "heartbeat_interval" ] 
                 del hello_event
 
