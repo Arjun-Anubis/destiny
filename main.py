@@ -3,6 +3,8 @@ import destiny.core as core
 import destiny.runners
 from destiny.header import *
 from destiny.structs import *
+from destiny.events import *
+from destiny.objects import *
 
 import os
 from dotenv import load_dotenv

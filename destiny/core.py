@@ -4,6 +4,8 @@ from destiny.header import *
 from destiny.exceptions import *
 import destiny.header as header
 import destiny.structs as structs
+import destiny.events as events
+import destiny.objects as objects
 
 
 import opus
@@ -53,13 +55,13 @@ class Client():
     def query_channels( self, guild_id, **kwargs):
         resp =  self._api_post( f"guilds/{ guild_id }/channels", method="GET" )
         log.info( resp )
-        return [ structs.Channel( channel ) for channel in resp.json() ]
+        return [ objects.Channel( channel ) for channel in resp.json() ]
 
-    async def join_voice_channel( self, guild_id, channel: structs.Channel, **kwargs ) -> structs.Result:
-        await self._event_send( structs.Update_Voice_State( data = structs.Voice_State( guild_id=guild_id, channel=channel, **kwargs)._dict  ) )
+    async def join_voice_channel( self, guild_id, channel: objects.Channel, **kwargs ) -> structs.Result:
+        await self._event_send( events.Update_Voice_State( data = events.Voice_State( guild_id=guild_id, channel=channel, **kwargs)._dict  ) )
 
     async def leave_voice_channel( self, guild_id, **kwargs ) -> structs.Result:
-        await self._event_send( structs.Update_Voice_State( data = structs.Voice_State( guild_id=guild_id, channel=None, **kwargs)._dict  ) )
+        await self._event_send( events.Update_Voice_State( data = events.Voice_State( guild_id=guild_id, channel=None, **kwargs)._dict  ) )
 
     def _api_post( self, subdivision, method="POST", **kwargs ): # add post to constants
         try:
@@ -68,14 +70,14 @@ class Client():
             log.debug( f"Requesting {rest_url}{subdivision} with {method}" )
         return requests.request( method,  f"{rest_url}{subdivision}", headers=header._header_gen(self.config.token), **kwargs )
 
-    async def on_message( self, message : structs.Message ):
+    async def on_message( self, message : objects.Message ):
         pass
     async def on_guild_create( self, dispatch ): #
         pass
     async def on_unimplimented( self ):
         pass
         
-    async def _on_dispatch( self, dispatch : structs.Dispatch ):
+    async def _on_dispatch( self, dispatch : events.Dispatch ):
         """
         Handle Dispatch
         Override at your own risk
@@ -83,7 +85,7 @@ class Client():
         match dispatch.type:
 
             case "MESSAGE_CREATE":
-                message = structs.Message( **dispatch.data )
+                message = objects.Message( **dispatch.data )
                 await self.on_message( message )
 
             case "VOICE_SERVER_UPDATE":
@@ -92,14 +94,21 @@ class Client():
                         "voice_guild_id" : dispatch.data["guild_id"],
                         "voice_token" : dispatch.data["token"]
                         }
-                # await self._voice_sd( voice_update )
+                await self._voice_sd( structs.Structure( voice_update ) )
                 log.info( "back to sync" )
 
 
             case "GUILD_CREATE":
                 await self.on_guild_create( dispatch )
             case "VOICE_STATE_UPDATE":
-                pass
+                log.warning( "Unhandled Voice State update" )
+                log.warning( dispatch )
+
+                """
+                In principle, the VOICE_STATE_UPDATE should be used to determine the session_id, but it appears to be the same as self.session_id, 
+                Thus, will change to handle later
+                """
+                # pass
                    
             case _:
                 log.warning( f"Unimplimented: {dispatch.type}" )
@@ -135,7 +144,7 @@ class Client():
                 log.info( "Initializing websocket" )
 
                 # Create class structure TODO
-                hello_event = structs.Hello( **json.loads( await self._websocket.recv() ) )
+                hello_event = events.Hello( **json.loads( await self._websocket.recv() ) )
                 
                 assert hello_event.opcode == 10
                 heartbeat_interval = hello_event.data.heartbeat_interval
@@ -143,16 +152,13 @@ class Client():
 
 
                 log.info( "[yellow]Identifying..." )
-                identify_message = structs.Identify( self.config ) 
+                identify_message = events.Identify( self.config ) 
                 await self._websocket.send( identify_message.pack() )
 
-                ready = structs.Ready( json.loads( await self._websocket.recv() ) )
+                ready = events.Ready( json.loads( await self._websocket.recv() ) )
                 if ready.opcode == 0 and ready.type == "READY":
                     log.info( "[green]Done!" )
-                    self.session = {
-                            "session_id" : ready.data.session_id,
-                            "user" : ready.data.user
-                            }
+                    self.session = structs.Structure( ready.data )
                 del ready
 
                 try:
@@ -171,7 +177,7 @@ class Client():
                     """
                     Dispatch
                     """
-                    dispatch = structs.Dispatch( **event )
+                    dispatch = events.Dispatch( **event )
                     await self._on_dispatch( dispatch )
                             
                 case 7:
@@ -210,7 +216,7 @@ class Client():
             await self._websocket.send( await self._event_queue.get() )
             log.info( "Sent message from queue" )
 
-    async def _event_send( self, event: structs.send_event ):  #one shot
+    async def _event_send( self, event: events.send_event ):  #one shot
         """
         Function to allow synchronous functions to send events, using a queue
         """
@@ -220,7 +226,7 @@ class Client():
         while True:
             log.debug("[yellow]Sending heartbeat")
 
-            heartbeat = structs.Heartbeat()
+            heartbeat = events.Heartbeat()
             log.info( "[yellow]Lub...?" )
             await self._websocket.send( heartbeat.pack() )
 
@@ -236,23 +242,36 @@ class Client():
         async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as voice_socket:
             # Voice socket cycle
 
+            dispatch = events.Dispatch_v( json.loads( await voice_socket.recv() ) )
 
-            js = structs.Dispatch_v( json.loads( await voice_socket.recv() ) )
-
-
-
-            match js.opcode:
+            match dispatch.opcode:
                 case 8:
-                    resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : self.session[ "user" ][ "id" ], "session_id" : self.session[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
-                    await voice_socket.send( resp )
-                    op2 = await voice_socket.recv()
-                    op2 = json.loads( op2 )
+
+                    identify = events.Identify_v(
+                            events.config_identify_v( 
+                                token=voice_update.voice_token,
+                                server_id=voice_update.voice_guild_id,
+                                user_id=self.session.user.id,
+                                session_id=self.session.session_id ) 
+                            )
+
+                    log.info( f"Sending => {identify.pack()}" )
+                    await voice_socket.send( identify.pack() )
+
+                    # op2 = await voice_socket.recv()
+                    # op2 = json.loads( op2 )
+
+                    ready = events.Ready_v( json.loads(await voice_socket.recv()) )
+                    assert ready.opcode == 2
+
+                    log.info( ready )
+
                     voice_send_info = asyncio.Queue( 30 )
                     voice_recv_info = asyncio.Queue( 30 )
                     voice_send_task = asyncio.create_task( self.voice_send( voice_socket, voice_send_info ) )
-                    voice_udp_task = asyncio.create_task( self.voice_udp( op2["d"]["ip"], op2["d"]["port"] , op2["d"]["ssrc"], voice_send_info, voice_recv_info ) )
+                    voice_udp_task = asyncio.create_task( self.voice_udp( ready.data.ip, ready.data.port, ready.data.ssrc, voice_send_info, voice_recv_info ) )
                     voice_handle_task = asyncio.create_task( self.voice_handle( voice_socket, voice_recv_info ) )
-                    voice_beat_task = asyncio.create_task( self.voice_beat( voice_socket , js[ "d" ][ "heartbeat_interval" ] ) )
+                    voice_beat_task = asyncio.create_task( self.voice_beat( voice_socket, dispatch.data.heartbeat_interval ) )
                     # await voice_beat_task
                     # await voice_handle_task
                     # await voice_send_task
@@ -261,12 +280,26 @@ class Client():
             
 
 
-    async def voice_beat( self, voice_socket, voicebeat_interval ):
+    async def voice_beat( self, heartbeat_interval ):
         while True:
-            resp =  json.dumps( { "op" : 3, "d" : uuid.uuid4().int } )
-            await voice_socket.send( resp )
-            await asyncio.sleep( voicebeat_interval/1000 )
+            # resp =  json.dumps( { "op" : 3, "d" : uuid.uuid4().int } )
+            # await voice_socket.send( resp )
+            # await asyncio.sleep( voicebeat_interval/1000 )
         
+            log.debug("[yellow]Sending heartbeat")
+
+            heartbeat = events.Heartbeat_v()
+            log.info( "[yellow]Lub...?" )
+            await self._voicesocket.send( heartbeat.pack() )
+
+            heartbeat_acknowledge = await self.heartbeat.get()
+            log.debug("[green]Received acknowledgement on queue, waiting...")
+            log.info( "[green]...Dub!" )
+
+
+            jitter = random.random()
+            await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
+
     async def voice_handle( self, voice_socket, voice_recv_info ):
         while True:
             try:
