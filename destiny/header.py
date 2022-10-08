@@ -1,6 +1,6 @@
 #All glob variables
 
-TOKEN_FILE = "../assets/token"
+TOKEN_FILE = "assets/token"
 
 from rich import print
 from rich import pretty
