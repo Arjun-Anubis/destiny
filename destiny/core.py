@@ -94,7 +94,7 @@ class Client():
                         "voice_guild_id" : dispatch.data["guild_id"],
                         "voice_token" : dispatch.data["token"]
                         }
-                await self._voice_sd( structs.Structure( voice_update ) )
+                self._voice_clients.append( VoiceClient( self, voice_update ) )
                 log.info( "back to sync" )
 
 
@@ -135,13 +135,13 @@ class Client():
         log.info("[green]Initializing IPC..." )
 
         self._event_queue = asyncio.Queue(30)
-        self._voice_queue = asyncio.Queue(30)
         self.heartbeat = asyncio.Queue(1)
+        self._voice_clients = []
         self.session = {}
 
 
         async with websockets.connect(url, ping_timeout=None, ping_interval=None) as self._websocket:
-                log.info( "Initializing websocket" )
+                log.info( "[yellow]Initializing websocket" )
 
                 # Create class structure TODO
                 hello_event = events.Hello( **json.loads( await self._websocket.recv() ) )
@@ -238,11 +238,17 @@ class Client():
             jitter = random.random()
             await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
 
+class VoiceClient:
+    def __init__( self, parent, voice_update ):
+        self.parent = parent
+        asyncio.as_completed(( self._voice_sd( voice_update ) ))
+
     async def _voice_sd( self, voice_update  ):
-        async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as voice_socket:
+        log.info( "Voice sd" )
+        async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as self._voicesocket:
             # Voice socket cycle
 
-            dispatch = events.Dispatch_v( json.loads( await voice_socket.recv() ) )
+            dispatch = events.Dispatch_v( json.loads( await self._voicesocket.recv() ) )
 
             match dispatch.opcode:
                 case 8:
@@ -256,22 +262,24 @@ class Client():
                             )
 
                     log.info( f"Sending => {identify.pack()}" )
-                    await voice_socket.send( identify.pack() )
+                    await self._voicesocket.send( identify.pack() )
 
                     # op2 = await voice_socket.recv()
                     # op2 = json.loads( op2 )
 
-                    ready = events.Ready_v( json.loads(await voice_socket.recv()) )
+                    ready = events.Ready_v( json.loads(await self._voicesocket.recv()) )
                     assert ready.opcode == 2
 
                     log.info( ready )
 
-                    voice_send_info = asyncio.Queue( 30 )
-                    voice_recv_info = asyncio.Queue( 30 )
-                    voice_send_task = asyncio.create_task( self.voice_send( voice_socket, voice_send_info ) )
-                    voice_udp_task = asyncio.create_task( self.voice_udp( ready.data.ip, ready.data.port, ready.data.ssrc, voice_send_info, voice_recv_info ) )
-                    voice_handle_task = asyncio.create_task( self.voice_handle( voice_socket, voice_recv_info ) )
-                    voice_beat_task = asyncio.create_task( self.voice_beat( voice_socket, dispatch.data.heartbeat_interval ) )
+                    self.voice_send_info = asyncio.Queue( 30 )
+                    self.voice_recv_info = asyncio.Queue( 30 )
+                    self.heartbeat = asyncio.Queue( 1 )
+
+                    voice_send_task = asyncio.create_task( self.voice_send( ) )
+                    voice_udp_task = asyncio.create_task( self.voice_udp( ready ) )
+                    voice_handle_task = asyncio.create_task( self.voice_handle() )
+                    voice_beat_task = asyncio.create_task( self.voice_beat( dispatch.data.heartbeat_interval ) )
                     # await voice_beat_task
                     # await voice_handle_task
                     # await voice_send_task
@@ -286,15 +294,18 @@ class Client():
             # await voice_socket.send( resp )
             # await asyncio.sleep( voicebeat_interval/1000 )
         
-            log.debug("[yellow]Sending heartbeat")
+            log.debug("[yellow]Sending [orange]voicebeat")
 
             heartbeat = events.Heartbeat_v()
-            log.info( "[yellow]Lub...?" )
+            log.info( "[blue]Lub...?" )
             await self._voicesocket.send( heartbeat.pack() )
 
             heartbeat_acknowledge = await self.heartbeat.get()
-            log.debug("[green]Received acknowledgement on queue, waiting...")
-            log.info( "[green]...Dub!" )
+            log.info("[purple]Received acknowledgement on queue, checking nonce...")
+            
+            assert heartbeat.data == heartbeat_acknowledge.data
+
+            log.info( "[pink]...Dub!" )
 
 
             jitter = random.random()
@@ -302,14 +313,12 @@ class Client():
 
     async def voice_handle( self, voice_socket, voice_recv_info ):
         while True:
-            try:
-                js = json.loads( await voice_socket.recv() )
-            except Exception as e:
-                inspect( e )
-                raise e
-            match js[ "op" ]: 
+            dispatch = events.Dispatch( json.loads( await self._voicesocket.recv() ) )
+            match dispatch.opcode:
                 case 4:
-                    await voice_recv_info.put( js )
+                    await self.voice_recv_info.put( js )
+                case 6:
+                    await self.heartbeat.put( dispatch )
                 case _:
                     print ( js )
 
