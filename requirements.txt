@@ -4,3 +4,4 @@ websockets
 importlib
 jsons
 python-dotenv
+websocket-client
