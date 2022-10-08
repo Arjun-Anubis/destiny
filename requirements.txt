@@ -2,3 +2,4 @@ rich
 asyncio
 websockets
 importlib
+python-dotenv

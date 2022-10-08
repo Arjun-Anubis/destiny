@@ -2,6 +2,7 @@
 # local
 from destiny.header import *
 from destiny.exceptions import *
+import destiny.header as header
 import destiny.structs as structs
 
 
@@ -64,7 +65,7 @@ class Client():
             log.debug( f"Sending payload { kwargs['data'] } to {rest_url}{subdivision} as {method}" )
         except:
             log.debug( f"Requesting {rest_url}{subdivision} with {method}" )
-        return requests.request( method,  f"{rest_url}{subdivision}", headers=HEADERS, **kwargs )
+        return requests.request( method,  f"{rest_url}{subdivision}", headers=header._header_gen(self.config.token), **kwargs )
 
     async def on_message( self, message : structs.Message ):
         pass
@@ -133,9 +134,11 @@ class Client():
                 log.info( "Initializing websocket" )
 
                 # Create class structure TODO
-                hello_event = json.loads( await self._websocket.recv() )
-                if hello_event[ "op" ] == 10:
-                    heartbeat_interval = hello_event[ "d" ][ "heartbeat_interval" ] 
+                hello_event = structs.Hello( **json.loads( await self._websocket.recv() ) )
+                log.info(hello_event)
+                
+                assert hello_event.opcode == 10
+                heartbeat_interval = hello_event.data.heartbeat_interval
                 del hello_event
 
 
@@ -143,13 +146,13 @@ class Client():
                 identify_message = structs.Identify( self.config ) 
                 await self._websocket.send( identify_message.pack() )
 
-                ready = json.loads( await self._websocket.recv() )
-                if ready[ "op" ] == 0 and ready[ "t" ] == "READY":
+                ready = structs.Ready( json.loads( await self._websocket.recv() ) )
+                if ready.opcode == 0 and ready.type == "READY":
                     log.info( "[green]Done!" )
                     # print( ready )
                     self.session = {
-                            "session_id" : ready["d"]["session_id"],
-                            "user" : ready["d"]["user"]
+                            "session_id" : ready.data.session_id,
+                            "user" : ready.data.user
                             }
                 del ready
 

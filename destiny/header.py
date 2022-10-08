@@ -1,6 +1,5 @@
 #All glob variables
 
-TOKEN_FILE = "assets/token"
 
 from rich import print
 from rich import pretty
@@ -30,8 +29,7 @@ rest_url = "https://discordapp.com/api/"
 
 VOICE_CONNECT=4
 
-with open( TOKEN_FILE ) as f:
-    token = f.read()[:-1] #Removing newline
 
-HEADERS = { "Authorization" : f"Bot {token}", "User-Agent" : "DiscordBot (https://github.com/Arjun-Anubis/snowflake, v0.1)" }
-DEST_DIR = "../assets/hw"
+def _header_gen( token ):
+    return { "Authorization" : f"Bot {token}", "User-Agent" : "DiscordBot (https://github.com/Arjun-Anubis/snowflake, v0.1)" }
+

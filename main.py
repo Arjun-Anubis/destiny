@@ -5,14 +5,18 @@ from destiny.header import *
 from destiny.structs import *
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 from parse import *
 from parse import compile
 # client = core.Client( message_handler.message_handler )
 
+destdir = "assets/hw"
 prefix = "hw"
-subjects = os.listdir( DEST_DIR )
+subjects = os.listdir( destdir )
 
 class custom_client( core.Client ):
     async def on_message( self, message ):
@@ -51,14 +55,14 @@ class custom_client( core.Client ):
                 # running special check for files
 
                 try:
-                    files = os.listdir( f"{DEST_DIR}/{arg1}/{arg2}" )
+                    files = os.listdir( f"{destdir}/{arg1}/{arg2}" )
                 except:
                     self.message( message.channel_id, Message( content="Sorry, We are unable to find that assignment" ) )
                     return
                 self.message( message.channel_id, Message( content=files.__str__()) )
             elif search( "pull", verb ):
                 log.info( "Matched pull (ternary)" )
-                self.message( message.channel_id, Message( content="Here you go" ), files={ "anubi.pdf" : open( f"{DEST_DIR}/{arg1}/{arg2}/anubi.pdf" ) } ) 
+                self.message( message.channel_id, Message( content="Here you go" ), files={ "anubi.pdf" : open( f"{destdir}/{arg1}/{arg2}/anubi.pdf" ) } ) 
 
         elif dual:
             verb = dual.named["verb"].strip()
@@ -71,9 +75,9 @@ class custom_client( core.Client ):
 
                 # running special check for subject
 
-                log.info( f"Looking in {DEST_DIR}/{arg1}." )
+                log.info( f"Looking in {destdir}/{arg1}." )
                 try:
-                    assignments = os.listdir( f"{DEST_DIR}/{arg1}" )
+                    assignments = os.listdir( f"{destdir}/{arg1}" )
                 except:
                     self.message( message.channel_id, Message( content="Sorry, We are unable to find that subject" ) )
                     return
@@ -113,6 +117,6 @@ class custom_client( core.Client ):
 
         
 
-config = config_identify( token=token, intents=641, properties=network_properties( os="linux" ) ) 
+config = config_identify( token=os.environ["token"], intents=641, properties=network_properties( os="linux" ) ) 
 client = custom_client( config )
 destiny.runners.auto_reload(client)

@@ -7,10 +7,11 @@ from destiny.exceptions import *
 from collections.abc import MutableMapping
 
 
-class structure_e(MutableMapping):
+class Structure(MutableMapping):
     """A dictionary that applies an arbitrary key-altering
        function before accessing the keys"""
 
+    _lookup = {}
     def __init__(self, *args, **kwargs):
         self._dict = dict()
         self.update(dict(*args, **kwargs))  # use the free update to set keys
@@ -24,10 +25,13 @@ class structure_e(MutableMapping):
             raise notFound
 
     def __setitem__(self, key, value, core=False):
-        self._dict[self._keytransform(key)] = value
+        if type(value) == dict:
+            self._dict[key] = Structure(value)
+        else:
+            self._dict[key] = value
 
     def __delitem__(self, key):
-        del self._dict[self._keytransform(key)]
+        del self._dict[key]
 
     def __iter__(self):
         return iter(self._dict)
@@ -35,10 +39,11 @@ class structure_e(MutableMapping):
     def __len__(self):
         return len(self._dict)
 
-    def _keytransform(self, key):
-        return self._lookup[key]
+    def __str__( self ):
+        return f"{self._dict}"
 
     __getattr__ = __getitem__
+    __repr__ = __str__
 
 
 class Result:
@@ -47,44 +52,50 @@ class Result:
     def __bool__( self ):
         return bool( self.result )
 
-class structure(structure_e):
+class ImmutableStructure(Structure):
+    """
+    Structure types, which have predefined fields and lookup tables, as well as defaults
+    """
     _defaults = {}
 
-    def __init__( self, **kwargs ):
+    def __init__( self, *args, **kwargs ):
         super().__setattr__( "_dict", dict() )
-        # self._dict = dict()
+        #Has defaults
         self.update(self._defaults)
-        self.update(dict(**kwargs))
+        self.update(dict(*args, **kwargs))
 
     def __str__( self ):
         return f"<{self.__class__.__name__}>\n{self._dict}"
     def __repr__( self ):
         return f"<{self.__class__.__name__}>\n{self._dict}"
 
+    def _keytransform(self, key):
+        return self._lookup[key]
+
+    def __delitem__(self, key):
+        del self._dict[self._keytransform(key)]
+
+    def __setitem__(self, key, value, core=False):
+        if type(value) == dict:
+            self._dict[self._keytransform(key)] = Structure(value)
+        else:
+            self._dict[self._keytransform(key)] = value
 
 
-class implimented_structure( structure ):
+class implimented_structure( ImmutableStructure ):
     def  pack( self ) -> str:
         return json.dumps( self._dict )
+
     def __setattr__( self, name, value ):
         self._dict.update( {self._lookup[name]: value} )
         self.update()
+
     # def update( self ):
     #     super().__setattr__( "_json", json.dumps( self.pack() ) )
 
 
-class unimplimented_structure( structure ): 
-    """
-    Immuatble Wrapper json
-    """
-    def __init__( self, data: dict(), **kwargs ):
-        self._pre_init()
-        self._dict = data 
-        for key in self._dict:
-            if  type( self._dict[key] ) == type( dict() ):
-                self._dict[key] = unimplimented_structure( self._dict[key] ) # recursive
-        self._post_init()
-
+class unimplimented_structure( Structure ): 
+    pass
 
 class Channel( unimplimented_structure ):
     def __str__( self ):
@@ -225,6 +236,11 @@ class Heartbeat( send_event ):
             "data" : None
             }
 
+class Hello( recv_event ):
+    pass
+class Ready( recv_event ):
+    pass
+
 class Update_Voice_State( send_event ):
     _defaults = {
             "opcode" : 4,
@@ -246,8 +262,8 @@ class Voice_State( implimented_structure ):
             "self_mute" : False,
             "self_deaf" : False
             }
-    def __init__( self, guild_id, channel: Channel, **kwargs ):
-        super().__init__( **kwargs )
+    def __init__( self, guild_id, channel: Channel, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
         self.guild_id = guild_id
         if channel:
             self.channel_id = channel.id
@@ -265,8 +281,8 @@ class Identify( send_event ):
             "opcode" : 2
             }
 
-    def __init__( self, config: config_identify, **kwargs ):
-        super().__init__( **kwargs )
+    def __init__( self, config: config_identify, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
         self.data = config._dict
 
 # Add remaining gateway codes Resume, request guild members, update voice state, update presence
