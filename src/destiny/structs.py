@@ -1,5 +1,45 @@
 import json
 from destiny.header import *
+from destiny.exceptions import *
+
+
+
+from collections.abc import MutableMapping
+
+
+class structure_e(MutableMapping):
+    """A dictionary that applies an arbitrary key-altering
+       function before accessing the keys"""
+
+    def __init__(self, *args, **kwargs):
+        self._dict = dict()
+        self.update(dict(*args, **kwargs))  # use the free update to set keys
+        
+
+    def __getitem__(self, key):
+        # return self._dict[self._keytransform(key)]
+        try:
+            return self._dict[key]
+        except KeyError:
+            raise notFound
+
+    def __setitem__(self, key, value, core=False):
+        self._dict[self._keytransform(key)] = value
+
+    def __delitem__(self, key):
+        del self._dict[self._keytransform(key)]
+
+    def __iter__(self):
+        return iter(self._dict)
+
+    def __len__(self):
+        return len(self._dict)
+
+    def _keytransform(self, key):
+        return self._lookup[key]
+
+    __getattr__ = __getitem__
+
 
 class Result:
     def __init__( self, result: bool ):
@@ -7,33 +47,21 @@ class Result:
     def __bool__( self ):
         return bool( self.result )
 
-class structure:
+class structure(structure_e):
     _defaults = {}
 
-    def _pre_init( self ):
-        pass
-    def _post_init( self ):
-        pass
-
     def __init__( self, **kwargs ):
-        self._pre_init()
         super().__setattr__( "_dict", dict() )
-        for key in self._defaults:
-            self.__setattr__( key, self._defaults[key] )
-        for key in kwargs:
-            self.__setattr__( key, kwargs[key] )
-        super().__setattr__( "_json", json.dumps( self.pack() ) )
-        self._post_init()
+        # self._dict = dict()
+        self.update(self._defaults)
+        self.update(dict(**kwargs))
 
     def __str__( self ):
         return f"<{self.__class__.__name__}>\n{self._dict}"
     def __repr__( self ):
         return f"<{self.__class__.__name__}>\n{self._dict}"
 
-    def __getattr__( self, attr ):        
-        return self._dict[ attr ]
-    def __getitem__( self, attr ):
-        return self._dict[ attr ]
+
 
 class implimented_structure( structure ):
     def  pack( self ) -> str:
@@ -41,8 +69,8 @@ class implimented_structure( structure ):
     def __setattr__( self, name, value ):
         self._dict.update( {self._lookup[name]: value} )
         self.update()
-    def update( self ):
-        super().__setattr__( "_json", json.dumps( self.pack() ) )
+    # def update( self ):
+    #     super().__setattr__( "_json", json.dumps( self.pack() ) )
 
 
 class unimplimented_structure( structure ): 
@@ -111,6 +139,9 @@ class User( recv_event ):
             }
 
 class Dispatch( recv_event ):
+    pass
+
+class Dispatch_v( Dispatch ):
     pass
 
 class Message( recv_event ):
@@ -218,7 +249,10 @@ class Voice_State( implimented_structure ):
     def __init__( self, guild_id, channel: Channel, **kwargs ):
         super().__init__( **kwargs )
         self.guild_id = guild_id
-        self.channel_id = channel.id
+        if channel:
+            self.channel_id = channel.id
+        else:
+            self.channel_id = channel
 
 class Identify( send_event ):
     """

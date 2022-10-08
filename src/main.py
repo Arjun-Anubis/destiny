@@ -103,6 +103,8 @@ class custom_client( core.Client ):
                 log.info( selected_channel )
                 self.message( message.channel_id, Message( content=f"Joining {str(selected_channel)}" ) )
                 await self.join_voice_channel( message.guild_id, selected_channel, self_mute=True )
+            elif search("leave", verb):
+                await self.leave_voice_channel( message.guild_id, self_mute=True )
 
 
     async def on_guild_create( self, dispatch ):

@@ -8,3 +8,5 @@ class UnkownOpcode:
     pass
 class SessionInvalid:
     pass
+class notFound( AttributeError ):
+    pass
