@@ -1,4 +1,4 @@
-# Destiny - On steroids
+# Destiny - With threading
 
 A discord bot library, written exclusively in python, with aims to have voice support
 
