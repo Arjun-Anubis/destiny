@@ -20,6 +20,7 @@ import pyaudio as pyaudio
 import ctypes
 import asyncio
 import wave
+import jsons
                     
 # system
 
@@ -91,7 +92,7 @@ class Client():
                         "voice_guild_id" : dispatch.data["guild_id"],
                         "voice_token" : dispatch.data["token"]
                         }
-                await self._voice_sd( voice_update )
+                # await self._voice_sd( voice_update )
                 log.info( "back to sync" )
 
 
@@ -135,7 +136,6 @@ class Client():
 
                 # Create class structure TODO
                 hello_event = structs.Hello( **json.loads( await self._websocket.recv() ) )
-                log.info(hello_event)
                 
                 assert hello_event.opcode == 10
                 heartbeat_interval = hello_event.data.heartbeat_interval
@@ -149,7 +149,6 @@ class Client():
                 ready = structs.Ready( json.loads( await self._websocket.recv() ) )
                 if ready.opcode == 0 and ready.type == "READY":
                     log.info( "[green]Done!" )
-                    # print( ready )
                     self.session = {
                             "session_id" : ready.data.session_id,
                             "user" : ready.data.user
@@ -238,11 +237,11 @@ class Client():
             # Voice socket cycle
 
 
-            js = Dispatch_v( json.loads( await voice_socket.recv() ) )
+            js = structs.Dispatch_v( json.loads( await voice_socket.recv() ) )
 
 
 
-            match js["op"]:
+            match js.opcode:
                 case 8:
                     resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : self.session[ "user" ][ "id" ], "session_id" : self.session[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
                     await voice_socket.send( resp )

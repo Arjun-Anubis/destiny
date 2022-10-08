@@ -1,4 +1,5 @@
 import json
+import jsons
 from destiny.header import *
 from destiny.exceptions import *
 
@@ -65,9 +66,9 @@ class ImmutableStructure(Structure):
         self.update(dict(*args, **kwargs))
 
     def __str__( self ):
-        return f"<{self.__class__.__name__}>\n{self._dict}"
-    def __repr__( self ):
-        return f"<{self.__class__.__name__}>\n{self._dict}"
+        return f"{self.__class__.__name__}({self._dict})"
+
+    __repr__ = __str__
 
     def _keytransform(self, key):
         return self._lookup[key]
@@ -84,7 +85,7 @@ class ImmutableStructure(Structure):
 
 class implimented_structure( ImmutableStructure ):
     def  pack( self ) -> str:
-        return json.dumps( self._dict )
+        return json.dumps( jsons.dump( self ) )
 
     def __setattr__( self, name, value ):
         self._dict.update( {self._lookup[name]: value} )
