@@ -12,6 +12,8 @@ import destiny.asyncudp as asyncudp
 
 # rich
 
+
+
 # pip installed 
 import requests
 import nacl.secret as secret
@@ -46,7 +48,7 @@ class Client():
 
 
     def message( self, channel_id, message, **kwargs):
-        return self._api_post( f"channels/{channel_id}/messages", data=message, **kwargs)
+        return self._api_post( f"channels/{channel_id}/messages", data=message._dict, **kwargs)
 
     def query_channels( self, guild_id, **kwargs):
         resp =  self._api_post( f"guilds/{ guild_id }/channels", method="GET" )
@@ -54,10 +56,8 @@ class Client():
         return [ structs.Channel( channel ) for channel in resp.json() ]
 
     async def join_voice_channel( self, guild_id, channel: structs.Channel, **kwargs ) -> structs.Result:
-        await self._event_send( structs.Update_Voice_State( data = structs.Voice_State( guild_id=guild_id, channel=channel, **kwargs)._dict  ) )
-
-    async def leave_voice_channel( self, guild_id, **kwargs ) -> structs.Result:
-        await self._event_send( structs.Update_Voice_State( data = structs.Voice_State( guild_id=guild_id, channel=None, **kwargs)._dict  ) )
+        log.info( "Sending join voice event" )
+        await self._event_send( structs.Update_Voice_State( data = structs.Voice_State( guild_id=guild_id, channel=channel, **kwargs).pack()  ) )
 
     def _api_post( self, subdivision, method="POST", **kwargs ): # add post to constants
         try:
@@ -85,22 +85,17 @@ class Client():
                 await self.on_message( message )
 
             case "VOICE_SERVER_UPDATE":
-                voice_update = {
-                        "voice_url" : f"wss://{ dispatch.data['endpoint'] }",
-                        "voice_guild_id" : dispatch.data["guild_id"],
-                        "voice_token" : dispatch.data["token"]
-                        }
-                await self._voice_sd( voice_update )
-                log.info( "back to sync" )
-
-
+                print ( js )
+                voice_update = dict()
+                voice_update[ "voice_url" ] = f'wss://{ js[ "d" ][ "endpoint" ] }'
+                voice_update[ "voice_guild_id" ] = js[ "d" ][ "guild_id" ]
+                voice_update[ "voice_token" ] = js[ "d" ][ "token" ]
+                await voice_info.put( voice_update )
             case "GUILD_CREATE":
                 await self.on_guild_create( dispatch )
-            case "VOICE_STATE_UPDATE":
-                pass
                    
             case _:
-                log.warning( f"Unimplimented: {dispatch.type}" )
+                log.warning( "Unimplimented" )
                 await self.on_unimplimented( )
 
     def run( self ):
@@ -154,7 +149,7 @@ class Client():
                 del ready
 
                 try:
-                    results = await asyncio.gather( self._event_handler_d(), self._sender_d(), self._heartbeat_d( heartbeat_interval ), return_exceptions=False )
+                    results = await asyncio.gather( self._event_handler_d(), self._sender_d(), self.voice(), self._heartbeat_d( heartbeat_interval ), return_exceptions=False )
                 except Exception as e:
                     raise e
 
@@ -212,6 +207,7 @@ class Client():
         """
         Function to allow synchronous functions to send events, using a queue
         """
+        log.info( event.pack() )
         return await self._event_queue.put( event.pack() )
 
     async def _heartbeat_d( self, heartbeat_interval ):
@@ -230,17 +226,12 @@ class Client():
             jitter = random.random()
             await asyncio.sleep( jitter * (heartbeat_interval / 1000) )
 
-    async def _voice_sd( self, voice_update  ):
+    async def voice( self  ):
+        voice_update = await self._voice_queue.get()
         async with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as voice_socket:
-            # Voice socket cycle
-
-
-            js = Dispatch_v( json.loads( await voice_socket.recv() ) )
-
-
-
-            match js["op"]:
-                case 8:
+            try:
+                js = json.loads( await voice_socket.recv() )
+                if js[ "op" ] == 8:
                     resp = json.dumps( { "op" : 0, "d" : { "server_id" : voice_update[ "voice_guild_id" ], "user_id" : self.session[ "user" ][ "id" ], "session_id" : self.session[ "session_id" ], "token" : voice_update[ "voice_token" ] } } )
                     await voice_socket.send( resp )
                     op2 = await voice_socket.recv()
@@ -256,6 +247,8 @@ class Client():
                     # await voice_send_task
                     # await voice_udp_task
 
+            except websockets.ConnectionClosed as e:
+                inspect ( e )
             
 
 
