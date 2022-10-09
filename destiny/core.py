@@ -6,13 +6,10 @@ import destiny.header as header
 import destiny.structs as structs
 import destiny.events as events
 import destiny.objects as objects
+import destiny.threaded as threaded
 
 
 import opus
-
-
-
-# rich
 
 # pip installed 
 import requests
@@ -22,24 +19,25 @@ import ctypes
 import wave
 import jsons
 import websocket
+from contextlib import closing
 
 # system
 
+import os.path
+import os
+import sys
 import time
 import random
 import logging
 import uuid
 import socket
-import random
-import os.path
-import os
-import sys
-import websockets
 import json
-import traceback
 import threading
 import queue
 
+from rich.traceback import install
+
+install()
 
 
 
@@ -52,6 +50,9 @@ class Client():
 
 
     def message( self, channel_id, message, **kwargs):
+        """
+        Post a message to a channel, given a channel id
+        """
         return self._api_post( f"channels/{channel_id}/messages", data=message, **kwargs)
 
     def query_channels( self, guild_id, **kwargs):
@@ -71,6 +72,12 @@ class Client():
         except:
             log.debug( f"Requesting {rest_url}{subdivision} with {method}" )
         return requests.request( method,  f"{rest_url}{subdivision}", headers=header._header_gen(self.config.token), **kwargs )
+
+    def _event_send( self, event: events.send_event ):  #one shot
+        """
+        Function to send event objects
+        """
+        return  self._websocket.send( event.pack() )
 
     def on_message( self, message : objects.Message ):
         pass
@@ -96,7 +103,7 @@ class Client():
                         "voice_guild_id" : dispatch.data["guild_id"],
                         "voice_token" : dispatch.data["token"]
                         }
-                self._voice_clients.append( VoiceClient( self, voice_update ) )
+                self._voice_clients.append( VoiceClient( self, structs.Structure( voice_update ) ) )
                 log.info( "back to sync" )
 
 
@@ -117,217 +124,178 @@ class Client():
                 self.on_unimplimented( )
 
     def run( self ):
-        while True:
-            try:
-                # io.run( self._initialize_async( "wss://gateway.discord.gg" ) )
-                self._initialize( "wss://gateway.discord.gg" )
-            except HardReset as e:
-                log.critical("Hard Reset")
-                break
-            except SoftReset as e:
-                log.warning( "Soft reset" )
-            except KeyboardInterrupt:
-                print( "[green] Closing to keyboard interrupt" )
-                quit()
-            except Exception as e:
-                raise e
-        # io.run( self._initialize_async( "wss://gateway.discord.gg" ) )
+        self._initialize( "wss://gateway.discord.gg" )
 
     def _initialize( self, url ):
 
         log.info("[green]Initializing IPC..." )
 
-        self._event_queue = queue.Queue(30)
         self.heartbeat = queue.Queue(1)
         self._voice_clients = []
         self.session = {}
 
 
-        self._websocket = websocket.create_connection( url ) 
-        log.info( "[yellow]Initializing websocket" )
+        with closing( websocket.create_connection( url ) ) as self._websocket:
+            log.info( "[yellow]Initializing websocket" )
 
-        # Create class structure TODO
-        hello_event = events.Hello( **json.loads( self._websocket.recv() ) )
+            hello_event = events.Hello( **json.loads( self._websocket.recv() ) )
 
-        assert hello_event.opcode == 10
-        heartbeat_interval = hello_event.data.heartbeat_interval
-        del hello_event
-
-
-        log.info( "[yellow]Identifying..." )
-        identify_message = events.Identify( self.config ) 
-        self._websocket.send( identify_message.pack() )
-
-        ready = events.Ready( json.loads( self._websocket.recv() ) )
-        if ready.opcode == 0 and ready.type == "READY":
-            log.info( "[green]Done!" )
-            self.session = structs.Structure( ready.data )
-        log.info(ready)
-        del ready
-        
-
-        #     results = io.gather( self._event_handler_d(), self._sender_d(), self._heartbeat_d( heartbeat_interval ), return_exceptions=False )
-        event_handler = threading.Thread( target=self._event_handler_d  )
-        sender = threading.Thread( target=self._sender_d)
-        heartbeater = threading.Thread( target=self._heartbeat_d, args=(heartbeat_interval,) )
-
-        event_handler.start()
-        sender.start()
-        heartbeater.start()
-
-        event_handler.join()
-        sender.join()
-        heartbeater.join()
+            assert hello_event.opcode == 10
+            heartbeat_interval = hello_event.data.heartbeat_interval
+            del hello_event
 
 
-        self._websocket.close()
+            log.info( "[yellow]Identifying..." )
+            identify_message = events.Identify( self.config ) 
+            self._websocket.send( identify_message.pack() )
 
-    def _event_handler_d( self ):
+            ready = events.Ready( json.loads( self._websocket.recv() ) )
+            if ready.opcode == 0 and ready.type == "READY":
+                log.info( "[green]Done!" )
+                self.session = structs.Structure( ready.data )
+            log.info(ready)
+            del ready
+            
 
-         while True:
-            event = json.loads(  self._websocket.recv() )
+            self._event_handler_d(heartbeat_interval)
 
 
-            match event["op"]:
-                case 0:
-                    """
-                    Dispatch
-                    """
-                    dispatch = events.Dispatch( **event )
-                    self._on_dispatch( dispatch )
 
-                case 7:
-                    """
-                    Reconnect
-                    """
-                    log.warning("Reconnecting because server said so")
-                case 9:
-                    """
-                    Session Invalid
-                    """
-                    log.error("Session Invalid")
-                    raise SessionInvalid
-                case 10:
-                    """
-                    Hello
 
-                    Shouldnt be sent after first connect,
-                    """
-                    log.error( "Should not receive this, hello after connection established" )
-                    raise ErrOpcode
-                case 11:
-                    """
-                    Heart beat acknowledged
-                    """
-                    log.debug( "[cyan bold]Putting acknowledge on queue" )
-                    self.heartbeat.put(event)
-
-                    pass
-                case _:
-                    log.error("Unrecognised op code")
-                    raise UnkownOpcode
-
-    def _sender_d( self ): # legacy
-         while True:
-            self._websocket.send( self._event_queue.get() )
-            log.info( "Sent message from queue" )
-
-    def _event_send( self, event: events.send_event ):  #one shot
-        """
-        Function to allow synchronous functions to send events, using a queue
-        """
-        return  self._event_queue.put( event.pack() )
-
-    def _heartbeat_d( self, heartbeat_interval ):
+    def _event_handler_d( self, heartbeat_interval ):
+        hs = heartbeat_interval/1000
         while True:
-            log.debug("[yellow]Sending heartbeat")
 
-            heartbeat = events.Heartbeat()
-            log.info( "[yellow]Lub...?" )
-            self._websocket.send( heartbeat.pack() )
-
-            heartbeat_acknowledge =  self.heartbeat.get()
-            log.debug("[green]Received acknowledgement on queue, waiting...")
-            log.info( "[green]...Dub!" )
-
-
+            stat = time.time()
             jitter = random.random()
-            time.sleep( jitter * (heartbeat_interval / 1000) )
+            jittered_hs = jitter * hs
+            self._websocket.settimeout( hs )
+
+            while True:
+
+                try:
+                    event_r =  json.loads( self._websocket.recv() ) 
+                    event = events.recv_event( event_r )
+                    now = time.time()
+                    self._websocket.settimeout( jittered_hs - (now-stat) )
+
+                except websocket.WebSocketTimeoutException:
+                    # Do a heartbeat and restart the clock
+
+                    log.debug("[yellow]Sending heartbeat")
+                    heartbeat = events.Heartbeat()
+                    log.info( "[yellow]Lub...?" )
+                    self._websocket.send( heartbeat.pack() )
+
+                    self._websocket.settimeout(5)
+                    heartbeat_acknowledge = events.recv_event( json.loads(  self._websocket.recv() ) )
+                    log.info( "[green]...Dub!" )
+
+                    break
+
+                match event.opcode:
+                    case 0:
+                        """
+                        Dispatch
+                        """
+                        dispatch = events.Dispatch( **event_r )
+                        self._on_dispatch( dispatch )
+
+                    case 7:
+                        """
+                        Reconnect
+                        """
+                        log.warning("Reconnecting because server said so")
+                    case 9:
+                        """
+                        Session Invalid
+                        """
+                        log.error("Session Invalid")
+                        raise SessionInvalid
+                    case 10:
+                        """
+                        Hello
+
+                        Shouldnt be sent after first connect,
+                        """
+                        log.error( "Should not receive this, hello after connection established" )
+                        raise ErrOpcode
+                    case 11:
+                        """
+                        Heart beat acknowledged
+                        """
+
+                        pass
+                    case _:
+                        log.error("Unrecognised op code")
+                        raise UnkownOpcode
+
+
+
 
 class VoiceClient:
     def __init__( self, parent, voice_update ):
         self.parent = parent
-        io.as_completed(( self._voice_sd( voice_update ) ))
+        self._voice_update = voice_update
+        log.info( "[yellow]Starting Voice Client..." )
+        self._initialize()
 
-    def _voice_sd( self, voice_update  ):
-         log.info( "Voice sd" )
-         with websockets.connect( voice_update[ "voice_url" ] + "?v=4" ) as self._voicesocket:
-             # Voice socket cycle
+    def _initialize( self  ):
+        log.info( "Voice sd" )
 
-            dispatch = events.Dispatch_v( json.loads(  self._voicesocket.recv() ) )
+        self._voicesocket = websocket.create_connection( self._voice_update.voice_url + "?v=4" )
+         # Voice socket cycle
 
-            match dispatch.opcode:
-                case 8:
+        dispatch = events.Dispatch_v( json.loads(  self._voicesocket.recv() ) ) 
 
-                    identify = events.Identify_v(
-                            events.config_identify_v( 
-                                token=voice_update.voice_token,
-                                server_id=voice_update.voice_guild_id,
-                                user_id=self.session.user.id,
-                                session_id=self.session.session_id ) 
-                            )
+        assert dispatch.opcode == 8
 
-                    log.info( f"Sending => {identify.pack()}" )
-                    self._voicesocket.send( identify.pack() )
+        identify = events.Identify_v(
+                events.config_identify_v( 
+                    token=self._voice_update.voice_token,
+                    server_id=self._voice_update.voice_guild_id,
+                    user_id=self.parent.session.user.id,
+                    session_id=self.parent.session.session_id ) 
+                )
 
-                    # op2 =  voice_socket.recv()
-                    # op2 = json.loads( op2 )
+        log.info( f"Sending => {identify.pack()}" )
+        self._voicesocket.send( identify.pack() )
 
-                    ready = events.Ready_v( json.loads( self._voicesocket.recv()) )
-                    assert ready.opcode == 2
+        ready = events.Ready_v( json.loads( self._voicesocket.recv()) )
+        assert ready.opcode == 2
 
-                    log.info( ready )
+        log.info( ready )
 
-                    self.voice_send_info = io.Queue( 30 )
-                    self.voice_recv_info = io.Queue( 30 )
-                    self.heartbeat = io.Queue( 1 )
+        self.voice_send_info = queue.Queue( 30 )
+        self.voice_recv_info = queue.Queue( 30 )
+        self.heartbeat = queue.Queue( 1 )
 
-                    voice_send_task = io.create_task( self.voice_send( ) )
-                    voice_udp_task = io.create_task( self.voice_udp( ready ) )
-                    voice_handle_task = io.create_task( self.voice_handle() )
-                    voice_beat_task = io.create_task( self.voice_beat( dispatch.data.heartbeat_interval ) )
-                    #  voice_beat_task
-                    #  voice_handle_task
-                    #  voice_send_task
-                    #  voice_udp_task
+        send = threaded.RaisingThread( target=self._voice_send )
+        udp = threaded.RaisingThread( target=self._voice_udp, args=(ready,) )
+        handle = threaded.RaisingThread( target=self._voice_handle )
+        beat = threaded.RaisingThread( target=self._voice_beat, args=( dispatch.data.heartbeat_interval, ) )
 
+        send.start()
+        udp.start()
+        handle.start()
+        beat.start()
 
+        log.info( "[green]Threads started, returning to parent..." )
 
-
-    def voice_beat( self, heartbeat_interval ):
+    def _voice_beat( self, heartbeat_interval ):
          while True:
-             # resp =  json.dumps( { "op" : 3, "d" : uuid.uuid4().int } )
-            #  voice_socket.send( resp )
-            #  io.sleep( voicebeat_interval/1000 )
-
             log.debug("[yellow]Sending [orange]voicebeat")
-
             heartbeat = events.Heartbeat_v()
             log.info( "[blue]Lub...?" )
             self._voicesocket.send( heartbeat.pack() )
-
             heartbeat_acknowledge =  self.heartbeat.get()
             log.info("[purple]Received acknowledgement on queue, checking nonce...")
-
             assert heartbeat.data == heartbeat_acknowledge.data
-
             log.info( "[pink]...Dub!" )
-
-
             jitter = random.random()
             time.sleep( jitter * (heartbeat_interval / 1000) )
 
-    def voice_handle( self, voice_socket, voice_recv_info ):
+    def _voice_handle( self, voice_socket, voice_recv_info ):
          while True:
             dispatch = events.Dispatch( json.loads(  self._voicesocket.recv() ) )
             match dispatch.opcode:
@@ -339,14 +307,14 @@ class VoiceClient:
                     print ( js )
 
     
-    def voice_send( self, voice_socket, voice_send_info ):
+    def _voice_send( self, voice_socket, voice_send_info ):
          while True:
             buffer_send =  voice_send_info.get()
             print ( buffer_send )
             voice_socket.send( buffer_send ) 
 
 
-    def voice_udp( self, ip, port, ssrc, voice_send_info, voice_recv_info ):
+    def _voice_udp( self, ip, port, ssrc, voice_send_info, voice_recv_info ):
 
         while True:
             voice_socket =   udp.create_socket( remote_addr = ( ip, port ) )

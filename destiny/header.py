@@ -27,9 +27,6 @@ log = logging.getLogger("rich")
 
 rest_url = "https://discordapp.com/api/"
 
-VOICE_CONNECT=4
-
-
 def _header_gen( token ):
     return { "Authorization" : f"Bot {token}", "User-Agent" : "DiscordBot (https://github.com/Arjun-Anubis/snowflake, v0.1)" }
 
