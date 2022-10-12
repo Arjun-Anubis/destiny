@@ -1,13 +1,15 @@
 import destiny.core as core
+import destiny.audio as audio
 from destiny.header import *
 from destiny.structs import *
 from destiny.events import *
 from destiny.objects import *
 
 import os
-from dotenv import load_dotenv
+import pyogg
+import dotenv
 
-load_dotenv()
+dotenv.load_dotenv()
 
 
 import parse
@@ -112,6 +114,10 @@ class custom_client( core.Client ):
             elif parse.search("speak", verb):
                 client = self._voice_clients[0]
                 client.cmd.put( lambda: client._set_speak( mic=True, priority= True ) )
+            elif parse.search("play", verb):
+                client = self._voice_clients[0]
+                source = pyogg.OpusFileStream("assets/audio.opus")
+                client.cmd.put( lambda: client.play( source ) )
 
 
     def on_guild_create( self, dispatch ):

@@ -1,7 +1,6 @@
 rich
-asyncio
 websockets
-importlib
 jsons
 python-dotenv
 websocket-client
+pyogg

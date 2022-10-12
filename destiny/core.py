@@ -6,7 +6,7 @@ import destiny.header as header
 import destiny.structs as structs
 import destiny.events as events
 import destiny.objects as objects
-import destiny.threaded as threaded
+import destiny.audio as audio
 
 
 import opus
@@ -15,7 +15,6 @@ import opus
 import requests
 import nacl.secret as secret
 import websocket
-import opus
 from contextlib import closing
 
 # system
@@ -31,36 +30,6 @@ import struct
 from rich.traceback import install
 
 install()
-
-# class bClient():
-#     def run( self ):
-#         pass
-#     def message( self, channel_id, message: objects.Message, **kwargs ) -> requests.Response:
-#         pass
-#     def query_channels( self, guild_id, **kwargs ) -> requests.Response:
-#         pass
-#     def join_voice_channel( self, guild_id: str, channel: objects.Channel, **kwargs ) -> structs.Result:
-#         pass
-#     def leave_voice_channel( self, guild_id: str, **kwargs ) -> structs.Result:
-#         pass
-#     def _api_post( self, subdivision: str, method="POST", **kwargs ) -> requests.Response: 
-#         """
-#         Send packet to discord api directly
-#         Use at your own risk
-#         """
-#         pass
-#     def _event_send( self, event: events.send_event ):  
-#         """
-#         Send a send_event object through the discord gateway
-#         """
-#         pass
-
-#     def _on_dispatch( self, dispatch : events.Dispatch ):
-#         """
-#         Handle Dispatch
-#         Override at your own risk
-#         """
-#         pass
 
 class Client():
     def __init__( self, config ):
@@ -377,15 +346,12 @@ class VoiceClient:
 
 
     def play( self, source ):
-        frame_length = 20 # ms
         frequency = 48000 # samples per second
-        frame_size = source.sample_size
-        encoder = opus.encoder.Encoder( frequency, 2, "voip" )
-        frames_per_packet = frequency * frame_length / 1000
+        frame_size = source.bytes_per_sample
         while True: 
-            pcm = source.next_frames( frames_per_packet )
+            pcm = source.get_buffer()
             print( pcm )
-            opus_data = encoder.encode( pcm, frame_size )
+            opus_data = audio.encoder.encode( pcm )
             print( opus_data )
 
 
