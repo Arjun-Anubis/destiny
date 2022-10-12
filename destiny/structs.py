@@ -26,7 +26,7 @@ class Structure(MutableMapping):
         except KeyError:
             raise notFound
 
-    def __setitem__(self, key, value, core=False):
+    def __setitem__(self, key, value ):
         if type(value) == dict:
             self._dict[key] = Structure(value)
         else:

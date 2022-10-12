@@ -1,6 +1,4 @@
-import destiny
 import destiny.core as core
-import destiny.runners
 from destiny.header import *
 from destiny.structs import *
 from destiny.events import *
@@ -12,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-from parse import *
+import parse
 from parse import compile
 # client = core.Client( message_handler.message_handler )
 
@@ -51,7 +49,7 @@ class custom_client( core.Client ):
             arg2 = ternary.named["arg2"].strip()
 
 
-            if search( "ls", verb ):
+            if parse.search( "ls", verb ):
                 log.info( "Matched ls (ternary)" )
 
                 # running special check for files
@@ -62,7 +60,7 @@ class custom_client( core.Client ):
                     self.message( message.channel_id, Message( content="Sorry, We are unable to find that assignment" ) )
                     return
                 self.message( message.channel_id, Message( content=files.__str__()) )
-            elif search( "pull", verb ):
+            elif parse.search( "pull", verb ):
                 log.info( "Matched pull (ternary)" )
                 self.message( message.channel_id, Message( content="Here you go" ), files={ "anubi.pdf" : open( f"{destdir}/{arg1}/{arg2}/anubi.pdf" ) } ) 
 
@@ -72,7 +70,7 @@ class custom_client( core.Client ):
 
             log.info( f"Matched dual verb, verb is { verb }, argument is { arg1 }" )
 
-            if search( "ls", verb ):
+            if parse.search( "ls", verb ):
                 log.info( "Matched ls (dual)" )
 
                 # running special check for subject
@@ -92,25 +90,28 @@ class custom_client( core.Client ):
             verb = singular.named["verb"].strip()
 
             log.info( f"Matched singular verb, verb is { verb }" )
-            if search( "ls", verb ):
+            if parse.search( "ls", verb ):
                 log.info( "Matched ls (singular)" )
 
                 channel_id = message.channel_id
                 draft = Message( content=subjects.__str__() )
                 self.message( channel_id, draft )
-            elif search( "join", verb ):
+            elif parse.search( "join", verb ):
                 log.info( "Matched join (singular)" )
 
                 voice_channels = [ channel for channel in self.query_channels( message.guild_id ) if channel.type == 2 ]
 
-                log.info( f"Voice Channels")
+                log.debug( f"Voice Channels")
 
                 selected_channel = voice_channels[0]
-                log.info( selected_channel )
+                log.debug( selected_channel )
                 self.message( message.channel_id, Message( content=f"Joining {str(selected_channel)}" ) )
                 self.join_voice_channel( message.guild_id, selected_channel, self_mute=True )
-            elif search("leave", verb):
-                 self.leave_voice_channel( message.guild_id, self_mute=True )
+            elif parse.search("leave", verb):
+                self.leave_voice_channel( message.guild_id, self_mute=True )
+            elif parse.search("speak", verb):
+                client = self._voice_clients[0]
+                client.cmd.put( lambda: client._set_speak( mic=True, priority= True ) )
 
 
     def on_guild_create( self, dispatch ):
@@ -121,4 +122,5 @@ class custom_client( core.Client ):
 
 config = config_identify( token=os.environ["token"], intents=641, properties=network_properties( os="linux" ) ) 
 client = custom_client( config )
-destiny.runners.auto_reload(client)
+client.run()
+# destiny.runners.auto_reload(client)

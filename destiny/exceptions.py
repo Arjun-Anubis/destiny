@@ -4,9 +4,9 @@ class SoftReset( Exception ):
     pass
 class ErrOpcode( Exception ):
     pass
-class UnkownOpcode:
+class UnkownOpcode( Exception ):
     pass
-class SessionInvalid:
+class SessionInvalid( Exception ):
     pass
 class notFound( AttributeError ):
     pass

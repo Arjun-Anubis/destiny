@@ -2,7 +2,7 @@ import threading
 from destiny.header import log
 
 class ExThread( threading.Thread ):
-    def run_x( *args, **kwargs ):
+    def run_x( self, *_args, **_kwargs ):
         try:
             if self._target:
                 self._target(*self._args, **self._kwargs)

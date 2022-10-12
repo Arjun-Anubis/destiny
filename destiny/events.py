@@ -172,3 +172,8 @@ class Identify_v( send_event ):
 
 # Add remaining gateway codes Resume, request guild members, update voice state, update presence
 
+class Speaking( send_event ):
+    _defaults = {
+            "opcode" : 5,
+            }
+
