@@ -15,17 +15,18 @@ import opus
 import requests
 import nacl.secret as secret
 import websocket
+import opus
 from contextlib import closing
 
 # system
 
-import os.path
 import os
 import time
 import random
 import json
 import threading
 import queue
+import struct
 
 from rich.traceback import install
 
@@ -373,6 +374,21 @@ class VoiceClient:
         event =  events.Speaking( data=structs.Structure(speaking=speaking, delay=0, ssrc=self.info.ssrc) ) 
         log.info( event )
         self._voicesocket.send( event.pack() )
+
+
+    def play( self, source ):
+        frame_length = 20 # ms
+        frequency = 48000 # samples per second
+        frame_size = source.sample_size
+        encoder = opus.encoder.Encoder( frequency, 2, "voip" )
+        frames_per_packet = frequency * frame_length / 1000
+        while True: 
+            pcm = source.next_frames( frames_per_packet )
+            print( pcm )
+            opus_data = encoder.encode( pcm, frame_size )
+            print( opus_data )
+
+
 
 
     # def _voice_beat( self, heartbeat_interval ):
