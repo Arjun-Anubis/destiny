@@ -177,3 +177,23 @@ class Speaking( send_event ):
             "opcode" : 5,
             }
 
+
+class VoiceSelect( send_event ):
+    _defaults = {
+            "opcode" : 1,
+            }
+
+
+class Select_v( structs.implimented_structure ):
+    _lookup = {
+            "address" : "address",
+            "port" : "port",
+            "mode" : "mode"
+            }
+    _defaults = {
+            "mode": "xalsa20_poly1305"
+            }
+    def __init__( self, address: str, port: int, **kwargs ):
+        super().__init__( **kwargs )
+        self.address = address
+        self.port = port

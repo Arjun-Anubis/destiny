@@ -9,11 +9,9 @@ import destiny.objects as objects
 import destiny.audio as audio
 
 
-import opus
 
 # pip installed 
 import requests
-import nacl.secret as secret
 import websocket
 from contextlib import closing
 
@@ -25,11 +23,11 @@ import random
 import json
 import threading
 import queue
-import struct
 
 from rich.traceback import install
 
 install()
+
 
 class Client():
     def __init__( self, config ):
@@ -344,49 +342,51 @@ class VoiceClient:
         log.info( event )
         self._voicesocket.send( event.pack() )
 
-
     def play( self, source ):
-        frequency = 48000 # samples per second
-        frame_size = source.bytes_per_sample
+        vs = events.VoiceSelect( data= structs.Structure( protocol="udp", data=events.Select_v( address=self.info.ip, port=self.info.port )) ).pack() 
+        log.info( vs )
+        self._voicesocket.send( vs )
+        session = structs.Structure( self._voicesocket.recv() )
+        self._set_speak(mic=True, priority=True)
+        self._playing_thread = threading.Thread( target=self._play, args=( source, session ) )
+        self._playing_thread.start()
+
+    def _play( self, source, session ):
+        log.info( "Started new thread" )
+        import nacl.secret
+        import struct
+        import socket
+        sequence_int = 0
+        send_time_ms = 0
+        send_ssrc = os.urandom(4)
+        soc = socket.socket()
+        soc.connect( (self.info.ip, self.info.port) )
+
         while True: 
+            # Grabbing the frames
             pcm = source.get_buffer()
-            print( pcm )
-            opus_data = audio.encoder.encode( pcm )
-            print( opus_data )
 
+            # Encoding them to opus
+            opus_data = audio.encoder.encode( pcm ) # I think its importing the wrong pyogg
+            log.debug( opus_data )
 
+            # Encrypting
+            key = bytes( session.data.secret_key )
+            safe = nacl.secret.SecretBox( key )
 
+            # Constructing header
 
-    # def _voice_beat( self, heartbeat_interval ):
-    #      while True:
-    #         log.debug("[yellow]Sending [orange]voicebeat")
-    #         heartbeat = events.Heartbeat_v()
-    #         log.info( "[blue]Lub...?" )
-    #         self._voicesocket.send( heartbeat.pack() )
-    #         heartbeat_acknowledge =  self.heartbeat.get()
-    #         log.info("[purple]Received acknowledgement on queue, checking nonce...")
-    #         assert heartbeat.data == heartbeat_acknowledge.data
-    #         log.info( "[pink]...Dub!" )
-    #         jitter = random.random()
-    #         time.sleep( jitter * (heartbeat_interval / 1000) )
+            header = struct.pack( "!!!!!", 0x80, 0x78, sequence_int, send_time_ms, send_ssrc )
+            nonce = header
 
-    # def _voice_handle( self, voice_socket, voice_recv_info ):
-    #      while True:
-    #         dispatch = events.Dispatch( json.loads(  self._voicesocket.recv() ) )
-    #         match dispatch.opcode:
-    #             case 4:
-    #                 self.voice_recv_info.put( js )
-    #             case 6:
-    #                 self.heartbeat.put( dispatch )
-    #             case _:
-    #                 print ( js )
+            encrypted_data = safe.encrypt( opus_data, nonce )
+            formed_data = header + encrypted_data
 
-    
-    # def _voice_send( self, voice_socket, voice_send_info ):
-    #      while True:
-    #         buffer_send =  voice_send_info.get()
-    #         print ( buffer_send )
-    #         voice_socket.send( buffer_send ) 
+            log.info( formed_data )
+            # send_to_be_encoded = stream.read( 1920 )
+            sequence_int += 1
+            send_time_ms += 20 # ms
+
 
 
     # def _voice_udp( self, ip, port, ssrc, voice_send_info, voice_recv_info ):
@@ -469,14 +469,6 @@ class VoiceClient:
     #                 print( decoded_data )
     #                 f.write( decoded_data )
 
-    #             send_header = bytearray( 12 )
-    #             send_header[0] = 0x80
-    #             send_header[1] = 0x78
-    #             send_header[2:4] = send_sequence.to_bytes(2, "big" )
-    #             send_header[4:8] = send_time.to_bytes(4, "big" )
-    #             send_header[8:12] = send_ssrc
-    #             send_nonce = send_header + bytearray(12)
-    #             send_to_be_encoded = stream.read( 1920 )
     #             print( len ( send_to_be_encoded ) )
     #             if len( send_to_be_encoded ):
     #                 send_data = send_header + safe.encrypt( encoder.encode( send_to_be_encoded, 960 ), bytes( send_nonce ) ) 

@@ -117,6 +117,11 @@ class custom_client( core.Client ):
             elif parse.search("play", verb):
                 client = self._voice_clients[0]
                 source = pyogg.OpusFileStream("assets/audio.opus")
+
+                # remove header data
+
+                source.get_buffer()
+
                 client.cmd.put( lambda: client.play( source ) )
 
 
